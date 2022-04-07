@@ -1,3 +1,7 @@
+# Purpose: 
+
+The purpose of this tool is to allow web developers to get a high level overview of website performance, and track 404 links. More functionality to come. . . 
+
 # Setup: 
 
 1. Download and install webdriver compatible driver like geckodriver: https://github.com/mozilla/geckodriver (downloads under releases)
