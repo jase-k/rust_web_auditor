@@ -12,3 +12,4 @@ tokio = { version = "1", features = ["full"] }
 [dev-dependencies]
 tokio-test = "*"
 async-trait = "^0.1.53"
+futures = "0.3"

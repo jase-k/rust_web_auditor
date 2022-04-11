@@ -5,17 +5,17 @@ use fantoccini::{Client, ClientBuilder, Locator};
 #[derive(Debug)]
 enum WebScrapingError {
     FantocciniNewSessionError(NewSessionError),
-    FantocciniCmdErrorr(CmdError)
+    FantocciniCmdErrorr(CmdError),
 }
 
 impl From<CmdError> for WebScrapingError {
-    fn from (e: CmdError) -> Self {
+    fn from(e: CmdError) -> Self {
         Self::FantocciniCmdErrorr(e)
     }
 }
 
 impl From<NewSessionError> for WebScrapingError {
-    fn from (e: NewSessionError) -> Self {
+    fn from(e: NewSessionError) -> Self {
         Self::FantocciniNewSessionError(e)
     }
 }
@@ -25,8 +25,10 @@ async fn main() -> Result<(), WebScrapingError> {
     Ok(visit_web().await?)
 }
 
-async fn open_new_client() -> Result<Client, WebScrapingError>  {
-    Ok(ClientBuilder::native().connect("http://localhost:4444").await?)
+async fn open_new_client() -> Result<Client, WebScrapingError> {
+    Ok(ClientBuilder::native()
+        .connect("http://localhost:4444")
+        .await?)
 }
 
 async fn visit_web() -> Result<(), WebScrapingError> {
@@ -55,10 +57,9 @@ async fn find_urls(web_client: &mut Client) -> Result<Vec<String>, WebScrapingEr
                 all_urls.push(url);
             };
         } else {
-            return Ok(all_urls)
+            return Ok(all_urls);
         }
     }
-
 }
 
 async fn get_href(mut element: Element) -> Result<Option<String>, WebScrapingError> {
@@ -68,133 +69,3 @@ async fn get_href(mut element: Element) -> Result<Option<String>, WebScrapingErr
 // async fn open_new_tab(web_client: &mut Client) -> Result<NewWindowResponse, WebScrapingError> {
 //     web_client.new_window(true)
 // }
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use fantoccini::{Client};
-    use futures::executor;
-
-    struct MainClient {
-        client: Option<Client>,
-        connections: u8
-    }
-
-    enum TestErrors {
-        TooManyConnections,
-        ConnectionError
-    }
-
-    static MAIN_CLIENT: MainClient = MainClient { client: None, connections: 0 };
-    
-    impl MainClient {
-        async fn connect(mainclient: &mut Self) -> Result<&Client, TestErrors> {
-            if let Some(client_in_use) = &mainclient.client {
-                Ok(mainclient.client.as_ref().unwrap())
-            } else {
-                let new_connection_result = ClientBuilder::native().connect("http://localhost:4444").await;
-                
-                match new_connection_result {
-                    Ok(client) => {
-                        mainclient.client = Some(client);
-                        Ok(mainclient.client.as_ref().unwrap())
-                    },
-                    Err(e) => return Err(TestErrors::ConnectionError)
-                }
-            }
-        }
-    }
-
-    // #[async_trait]
-    impl Drop for MainClient {
-        fn drop(&mut self){
-            println!("Dropping Client");
-            if let Some(client) = &self.client {
-                executer::block_on(client.close());
-            } else {
-                println!("Error closing Client!");
-            }
-        }
-    }
-
-
-    //Open a client and edit drop function so that when client goes out of scope, close the connection. 
-
-
-    // #[tokio::test]
-    // async fn open_new_tab_test(){
-    //     let new_tab_result = open_new_tab(TEST_CLIENT);
-    // }
-
-    #[tokio::test]
-    async fn open_new_client_test(){
-        
-        let open_result = open_new_client().await;
-        assert!(open_result.is_ok(), "Client did not OPEN properly {:?}", open_result);
-        
-        if let Ok(mut client) = open_result {
-            let close_result = client.close().await;
-            assert!(close_result.is_ok(), "Client did not CLOSE properly {:?}", close_result);
-        }
-    }
-
-    #[tokio::test]
-    async fn find_urls_test(){
-        // Set-Up: 
-        let open_result = open_new_client().await;
-        if let Ok(mut client) = open_result {
-            let url = "src/tests/supplement/four_urls.html";
-            let nav_result = client.goto(&url).await;
-
-            if let Err(res) = nav_result {
-                let close_result = client.close().await;
-                assert!(close_result.is_ok(), "Client did not CLOSE properly {:?}", close_result);
-                assert!(false, "Error executing navigation to {}", url )
-            }
-
-            let close_result = client.close().await;
-            assert!(close_result.is_ok(), "Client did not CLOSE properly {:?}", close_result);
-
-        }
-    }
-    #[tokio::test]
-    async fn find_urls_test1(){
-        // Set-Up: 
-        let open_result = open_new_client().await;
-        if let Ok(mut client) = open_result {
-            let url = "src/tests/supplement/four_urls.html";
-            let nav_result = client.goto(&url).await;
-
-            if let Err(res) = nav_result {
-                let close_result = client.close().await;
-                assert!(close_result.is_ok(), "Client did not CLOSE properly {:?}", close_result);
-                assert!(false, "Error executing navigation to {}", url )
-            }
-
-            let close_result = client.close().await;
-            assert!(close_result.is_ok(), "Client did not CLOSE properly {:?}", close_result);
-
-        }
-    }
-
-    #[tokio::test]
-    async fn find_urls_test2(){
-        // Set-Up: 
-        let open_result = open_new_client().await;
-        if let Ok(mut client) = open_result {
-            let url = "src/tests/supplement/four_urls.html";
-            let nav_result = client.goto(&url).await;
-
-            if let Err(res) = nav_result {
-                let close_result = client.close().await;
-                assert!(close_result.is_ok(), "Client did not CLOSE properly {:?}", close_result);
-                assert!(false, "Error executing navigation to {}", url )
-            }
-
-            let close_result = client.close().await;
-            assert!(close_result.is_ok(), "Client did not CLOSE properly {:?}", close_result);
-
-        }
-    }
-}
