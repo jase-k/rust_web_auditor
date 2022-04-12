@@ -89,8 +89,19 @@ impl UrlIndex {
     }
 
     fn add(&self, url: Url) -> &Self {
-        let mut url_vector = self.good_urls.lock().unwrap();
+        let mut url_vector;
+        if url.response_code < 300 {
+            url_vector = self.good_urls.lock().unwrap();
+        } else if url.response_code < 400 {
+            url_vector = self.redirected_urls.lock().unwrap();
+        } else if url.response_code < 500 {
+            url_vector = self.bad_urls.lock().unwrap();
+        } else {
+            url_vector = self.error_urls.lock().unwrap();
+        }
+        
         (*url_vector).push(url);
+
         drop(url_vector);
         self
     }
@@ -257,6 +268,54 @@ mod tests {
             good_urls: Arc::new(Mutex::new(vec![url_copy])),  
             redirected_urls: Arc::new(Mutex::new(Vec::new())), 
             error_urls: Arc::new(Mutex::new(Vec::new()))
+        })
+    }
+
+    #[test]
+    fn url_index_add_bad_url_test(){
+        let url_index = UrlIndex::new();
+        let url = Url::new("https://example.com".to_string(), 404, "https://google.com/".to_string());
+        let url_copy = url.clone();
+
+        url_index.add(url); 
+
+        assert_eq!(url_index, UrlIndex {
+            bad_urls: Arc::new(Mutex::new(vec![url_copy])),  
+            good_urls: Arc::new(Mutex::new(Vec::new())), 
+            redirected_urls: Arc::new(Mutex::new(Vec::new())), 
+            error_urls: Arc::new(Mutex::new(Vec::new()))
+        })
+    }
+
+    #[test]
+    fn url_index_add_redirected_url_test(){
+        let url_index = UrlIndex::new();
+        let url = Url::new("https://example.com".to_string(), 301, "https://google.com/".to_string());
+        let url_copy = url.clone();
+
+        url_index.add(url); 
+
+        assert_eq!(url_index, UrlIndex {
+            bad_urls: Arc::new(Mutex::new(Vec::new())), 
+            good_urls: Arc::new(Mutex::new(Vec::new())), 
+            redirected_urls: Arc::new(Mutex::new(vec![url_copy])),  
+            error_urls: Arc::new(Mutex::new(Vec::new()))
+        })
+    }
+
+    #[test]
+    fn url_index_add_error_url_test(){
+        let url_index = UrlIndex::new();
+        let url = Url::new("https://example.com".to_string(), 500, "https://google.com/".to_string());
+        let url_copy = url.clone();
+
+        url_index.add(url); 
+
+        assert_eq!(url_index, UrlIndex {
+            bad_urls: Arc::new(Mutex::new(Vec::new())), 
+            good_urls: Arc::new(Mutex::new(Vec::new())),
+            redirected_urls: Arc::new(Mutex::new(Vec::new())), 
+            error_urls: Arc::new(Mutex::new(vec![url_copy])),  
         })
     }
 }
