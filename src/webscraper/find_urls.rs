@@ -75,7 +75,8 @@ pub struct UrlIndex {
     bad_urls: Arc<Mutex<Vec<Url>>>, //400-499 response status
     good_urls: Arc<Mutex<Vec<Url>>>,  //200-299 response status 
     redirected_urls: Arc<Mutex<Vec<Url>>>, //300-399 response status
-    error_urls: Arc<Mutex<Vec<Url>>> //500+ response status Internal errors. 
+    error_urls: Arc<Mutex<Vec<Url>>>, //500+ response status Internal errors. 
+    all_urls: Arc<Mutex<Vec<String>>> //Strings of all urls
 }
 
 impl UrlIndex {
@@ -84,7 +85,8 @@ impl UrlIndex {
             bad_urls: Arc::new(Mutex::new(vec![])), 
             good_urls: Arc::new(Mutex::new(vec![])),  
             redirected_urls: Arc::new(Mutex::new(vec![])), 
-            error_urls: Arc::new(Mutex::new(vec![]))
+            error_urls: Arc::new(Mutex::new(vec![])),
+            all_urls: Arc::new(Mutex::new(vec![]))
         }
     }
 
@@ -105,16 +107,29 @@ impl UrlIndex {
         drop(url_vector);
         self
     }
+
+    fn add_to_list(&self, url: Vec<String>) -> &Self {
+        let mut url_vec_guard = self.all_urls.lock().unwrap();
+        let mut url_iter = url.iter();
+        while let Some(url_string) = url_iter.next() {
+            (*url_vec_guard).push(url_string.to_string());
+        }
+        self
+    }
 }
 
 pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
     // Open web connection
+    let url_index = UrlIndex::new();
+
     let mut web_client: Client = open_new_client().await?;
     web_client.goto("https://facebook.com/").await?; 
     
     println!("{}", web_client.current_url().await?);
 
-    let _all_urls = find_urls(&mut web_client).await?;
+    let all_urls = find_urls(&mut web_client).await?;
+    url_index.add_to_list(all_urls);
+
     web_client.close().await;
     // Create up to 10 new pages
     // For each url -> parse urls and add to set. 
@@ -122,12 +137,7 @@ pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
     // Err(WebScrapingError::FantocciniCmdErrorr(CmdError))
     
     
-    Ok(UrlIndex{
-        bad_urls: Arc::new(Mutex::new(Vec::new())) , //400-499 response status
-        good_urls: Arc::new(Mutex::new(Vec::new())) ,  //200-299 response status 
-        redirected_urls: Arc::new(Mutex::new(Vec::new())) , //300-399 response status
-        error_urls: Arc::new(Mutex::new(Vec::new())) 
-    })
+    Ok(url_index)
 }
 
 async fn open_new_client() -> Result<Client, WebScrapingError> {
@@ -248,7 +258,8 @@ mod tests {
             bad_urls: Arc::new(Mutex::new(Vec::new())), 
             good_urls: Arc::new(Mutex::new(Vec::new())),  
             redirected_urls: Arc::new(Mutex::new(Vec::new())), 
-            error_urls: Arc::new(Mutex::new(Vec::new()))
+            error_urls: Arc::new(Mutex::new(Vec::new())),
+            all_urls: Arc::new(Mutex::new(Vec::new()))
         })
     }
 
@@ -264,7 +275,8 @@ mod tests {
             bad_urls: Arc::new(Mutex::new(Vec::new())), 
             good_urls: Arc::new(Mutex::new(vec![url_copy])),  
             redirected_urls: Arc::new(Mutex::new(Vec::new())), 
-            error_urls: Arc::new(Mutex::new(Vec::new()))
+            error_urls: Arc::new(Mutex::new(Vec::new())),
+            all_urls: Arc::new(Mutex::new(Vec::new()))
         })
     }
 
@@ -280,7 +292,8 @@ mod tests {
             bad_urls: Arc::new(Mutex::new(vec![url_copy])),  
             good_urls: Arc::new(Mutex::new(Vec::new())), 
             redirected_urls: Arc::new(Mutex::new(Vec::new())), 
-            error_urls: Arc::new(Mutex::new(Vec::new()))
+            error_urls: Arc::new(Mutex::new(Vec::new())),
+            all_urls: Arc::new(Mutex::new(Vec::new()))
         })
     }
 
@@ -296,7 +309,8 @@ mod tests {
             bad_urls: Arc::new(Mutex::new(Vec::new())), 
             good_urls: Arc::new(Mutex::new(Vec::new())), 
             redirected_urls: Arc::new(Mutex::new(vec![url_copy])),  
-            error_urls: Arc::new(Mutex::new(Vec::new()))
+            error_urls: Arc::new(Mutex::new(Vec::new())),
+            all_urls: Arc::new(Mutex::new(Vec::new())),
         })
     }
 
@@ -313,6 +327,39 @@ mod tests {
             good_urls: Arc::new(Mutex::new(Vec::new())),
             redirected_urls: Arc::new(Mutex::new(Vec::new())), 
             error_urls: Arc::new(Mutex::new(vec![url_copy])),  
+            all_urls: Arc::new(Mutex::new(vec![])),  
+        })
+    }
+
+    #[test]
+    fn url_index_add_one_all_url_test(){
+        let url_index = UrlIndex::new();
+        let url = vec!["https://example.com".to_string()];
+
+        url_index.add_to_list(url); 
+
+        assert_eq!(url_index, UrlIndex {
+            bad_urls: Arc::new(Mutex::new(Vec::new())), 
+            good_urls: Arc::new(Mutex::new(Vec::new())),
+            redirected_urls: Arc::new(Mutex::new(Vec::new())), 
+            error_urls: Arc::new(Mutex::new(Vec::new())),  
+            all_urls: Arc::new(Mutex::new(vec!["https://example.com".to_string()])),  
+        })
+    }
+
+    #[test]
+    fn url_index_add_multiple_all_url_test(){
+        let url_index = UrlIndex::new();
+        let url = vec!["https://example.com".to_string(), "https://facebook.com/".to_string(), "https://google.com".to_string()];
+
+        url_index.add_to_list(url); 
+
+        assert_eq!(url_index, UrlIndex {
+            bad_urls: Arc::new(Mutex::new(Vec::new())), 
+            good_urls: Arc::new(Mutex::new(Vec::new())),
+            redirected_urls: Arc::new(Mutex::new(Vec::new())), 
+            error_urls: Arc::new(Mutex::new(Vec::new())),  
+            all_urls: Arc::new(Mutex::new( vec!["https://example.com".to_string(), "https://facebook.com/".to_string(), "https://google.com".to_string()])),  
         })
     }
 }
