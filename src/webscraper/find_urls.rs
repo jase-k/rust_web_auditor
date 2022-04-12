@@ -23,7 +23,7 @@ impl From<NewSessionError> for WebScrapingError {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Url {
     url: String, 
     response_code: u16, 
@@ -91,41 +91,10 @@ impl UrlIndex {
     fn add(&self, url: Url) -> &Self {
         let mut url_vector = self.good_urls.lock().unwrap();
         (*url_vector).push(url);
+        drop(url_vector);
         self
     }
 }
-
-impl PartialEq for UrlIndex {
-    fn eq(&self, other: &UrlIndex) -> bool {
-
-        let self_bad_urls = self.bad_urls.lock().unwrap();
-        let other_bad_urls = other.bad_urls.lock().unwrap();
-        if *self_bad_urls != *other_bad_urls {
-            return false
-        }
-
-        let self_good_urls = self.good_urls.lock().unwrap();
-        let other_good_urls = other.good_urls.lock().unwrap();
-        if *self_good_urls != *other_good_urls {
-            return false
-        }
-
-        let self_redirected_urls = self.redirected_urls.lock().unwrap();
-        let other_redirected_urls = other.redirected_urls.lock().unwrap();
-        if *self_redirected_urls != *other_redirected_urls {
-            return false
-        }
-
-        let self_error_urls = self.error_urls.lock().unwrap();
-        let other_error_urls = other.error_urls.lock().unwrap();
-        if *self_error_urls != *other_error_urls {
-            return false
-        }
-
-        return true
-    }
-}
-
 
 pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
     // Open web connection
@@ -190,6 +159,56 @@ async fn get_href(mut element: Element) -> Result<Option<String>, WebScrapingErr
 mod tests {
     use super::*;
 
+    impl PartialEq for UrlIndex {
+        fn eq(&self, other: &UrlIndex) -> bool {
+    
+            let self_bad_urls = self.bad_urls.lock().unwrap();
+            let other_bad_urls = other.bad_urls.lock().unwrap();
+            if *self_bad_urls != *other_bad_urls {
+                return false
+            }
+    
+            let self_good_urls = self.good_urls.lock().unwrap();
+            let other_good_urls = other.good_urls.lock().unwrap();
+            if *self_good_urls != *other_good_urls {
+                return false
+            }
+    
+            let self_redirected_urls = self.redirected_urls.lock().unwrap();
+            let other_redirected_urls = other.redirected_urls.lock().unwrap();
+            if *self_redirected_urls != *other_redirected_urls {
+                return false
+            }
+    
+            let self_error_urls = self.error_urls.lock().unwrap();
+            let other_error_urls = other.error_urls.lock().unwrap();
+            if *self_error_urls != *other_error_urls {
+                return false
+            }
+    
+            return true
+        }
+    }
+
+    impl Clone for Url {
+        fn clone(&self) -> Url {
+            let mut new_vec = Vec::new();
+            let old_vec = self.site_references.lock().unwrap();
+            let mut old_vec_iter = old_vec.iter();
+
+            while let Some(url) = old_vec_iter.next() {
+                new_vec.push(url.clone());
+            }
+
+            Url {
+                url: self.url.clone(), 
+                response_code: self.response_code.clone(),
+                site_references: Arc::new(Mutex::new(new_vec)),
+                redirected_to: self.redirected_to.clone()
+            }
+
+        }
+    }
 
     #[test]
     fn url_new_test(){
