@@ -109,28 +109,25 @@ impl UrlIndex {
 
 pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
     // Open web connection
+    let mut web_client: Client = open_new_client().await?;
+    web_client.goto("https://facebook.com/").await?; 
+    
+    println!("{}", web_client.current_url().await?);
+
+    let _all_urls = find_urls(&mut web_client).await?;
+    web_client.close().await;
     // Create up to 10 new pages
     // For each url -> parse urls and add to set. 
         // -> parse : (response status, site reference, and url) 
     // Err(WebScrapingError::FantocciniCmdErrorr(CmdError))
+    
+    
     Ok(UrlIndex{
         bad_urls: Arc::new(Mutex::new(Vec::new())) , //400-499 response status
         good_urls: Arc::new(Mutex::new(Vec::new())) ,  //200-299 response status 
         redirected_urls: Arc::new(Mutex::new(Vec::new())) , //300-399 response status
         error_urls: Arc::new(Mutex::new(Vec::new())) 
     })
-}
-
-pub async fn visit_web() -> Result<(), WebScrapingError> {
-    let mut web_client = open_new_client().await?;
-
-    web_client.goto("https://lulzbot.com/").await?; // ? since this function returns an Result Type. This ? unwraps result, but if returns an err, it'll stop the whole function and return the error.
-    let url = web_client.current_url().await?;
-    println!("{}", url.as_ref());
-
-    let _all_urls = find_urls(&mut web_client).await?;
-
-    Ok(web_client.close().await?)
 }
 
 async fn open_new_client() -> Result<Client, WebScrapingError> {

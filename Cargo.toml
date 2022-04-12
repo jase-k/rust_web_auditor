@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 fantoccini = "^0.18.0"
 tokio = { version = "1", features = ["full"] }
+geckodriver = "0.31.0"
 
 [dev-dependencies]
 tokio-test = "*"

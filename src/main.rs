@@ -1,8 +1,10 @@
 mod webscraper;
-use webscraper::find_urls::{WebScrapingError, visit_web};
+use webscraper::find_urls::{WebScrapingError, index_urls, UrlIndex};
 
 
 #[tokio::main]
 async fn main() -> Result<(), WebScrapingError> {
-    Ok(visit_web().await?)
+    let result: UrlIndex = index_urls().await?;
+
+    Ok(())
 }
