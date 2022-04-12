@@ -76,16 +76,19 @@ pub struct UrlIndex {
     redirected_urls: Arc<Mutex<Vec<Url>>>, //300-399 response status
     error_urls: Arc<Mutex<Vec<Url>>>,      //500+ response status Internal errors.
     all_urls: Arc<Mutex<Vec<String>>>,     //Strings of all urls
+    domain_list: Arc<Vec<String>>
 }
 
 impl UrlIndex {
-    fn new() -> UrlIndex {
+    fn new(mut domains: Vec<String> ) -> UrlIndex {
+        //TODO reformat domains to have no "/"
         UrlIndex {
             bad_urls: Arc::new(Mutex::new(vec![])),
             good_urls: Arc::new(Mutex::new(vec![])),
             redirected_urls: Arc::new(Mutex::new(vec![])),
             error_urls: Arc::new(Mutex::new(vec![])),
             all_urls: Arc::new(Mutex::new(vec![])),
+            domain_list: Arc::new(domains),
         }
     }
 
@@ -120,11 +123,28 @@ impl UrlIndex {
         
         self
     }
+
+    fn filter_domains(&self, mut urls: Vec<String>) -> Vec<String> {
+        let domain_iter = self.domain_list.iter(); 
+        urls.into_iter()
+            .filter(|url|{
+                let mut should_remove = true;
+
+                for domain in &domain_iter {
+                    if url.starts_with(domain) {
+                        should_remove = false;
+                        break;
+                    } 
+                }
+                should_remove
+            })
+            .collect()
+    }
 }
 
 pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
     // Open web connection
-    let url_index = UrlIndex::new();
+    let url_index = UrlIndex::new(vec!["https://facebook.com/".to_string()]);
 
     let mut web_client: Client = open_new_client().await?;
 
@@ -193,7 +213,7 @@ fn format_urls(mut domain: String, mut urls: Vec<String>) -> Vec<String> {
         // Remove # to the end ->
         if let Some(idx) = url.find("#") {
             let (url_replacement, _) = url.split_at(idx);
-            
+
             *url = url_replacement.to_string();
         }
 
@@ -300,7 +320,7 @@ mod tests {
 
     #[test]
     fn url_index_new_test() {
-        let url_index = UrlIndex::new();
+        let url_index = UrlIndex::new(vec![]);
         assert_eq!(
             url_index,
             UrlIndex {
@@ -308,14 +328,15 @@ mod tests {
                 good_urls: Arc::new(Mutex::new(Vec::new())),
                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
                 error_urls: Arc::new(Mutex::new(Vec::new())),
-                all_urls: Arc::new(Mutex::new(Vec::new()))
+                all_urls: Arc::new(Mutex::new(Vec::new())),
+                domain_list: Arc::new(vec!["https://example.com".to_string()])
             }
         )
     }
 
     #[test]
     fn url_index_add_good_url_test() {
-        let url_index = UrlIndex::new();
+        let url_index = UrlIndex::new(vec!["https://example.com".to_string()]);
         let url = Url::new(
             "https://example.com".to_string(),
             200,
@@ -332,14 +353,15 @@ mod tests {
                 good_urls: Arc::new(Mutex::new(vec![url_copy])),
                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
                 error_urls: Arc::new(Mutex::new(Vec::new())),
-                all_urls: Arc::new(Mutex::new(Vec::new()))
+                all_urls: Arc::new(Mutex::new(Vec::new())),
+                domain_list: Arc::new(vec!["https://example.com".to_string()])
             }
         )
     }
 
     #[test]
     fn url_index_add_bad_url_test() {
-        let url_index = UrlIndex::new();
+        let url_index = UrlIndex::new(vec!["https://example.com".to_string()]);
         let url = Url::new(
             "https://example.com".to_string(),
             404,
@@ -356,14 +378,15 @@ mod tests {
                 good_urls: Arc::new(Mutex::new(Vec::new())),
                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
                 error_urls: Arc::new(Mutex::new(Vec::new())),
-                all_urls: Arc::new(Mutex::new(Vec::new()))
+                all_urls: Arc::new(Mutex::new(Vec::new())),
+                domain_list: Arc::new(vec!["https://example.com".to_string()])
             }
         )
     }
 
     #[test]
     fn url_index_add_redirected_url_test() {
-        let url_index = UrlIndex::new();
+        let url_index = UrlIndex::new(vec!["https://example.com".to_string()]);
         let url = Url::new(
             "https://example.com".to_string(),
             301,
@@ -381,13 +404,14 @@ mod tests {
                 redirected_urls: Arc::new(Mutex::new(vec![url_copy])),
                 error_urls: Arc::new(Mutex::new(Vec::new())),
                 all_urls: Arc::new(Mutex::new(Vec::new())),
+                domain_list: Arc::new(vec!["https://example.com".to_string()])
             }
         )
     }
 
     #[test]
     fn url_index_add_error_url_test() {
-        let url_index = UrlIndex::new();
+        let url_index = UrlIndex::new(vec!["https://example.com".to_string()]);
         let url = Url::new(
             "https://example.com".to_string(),
             500,
@@ -405,13 +429,14 @@ mod tests {
                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
                 error_urls: Arc::new(Mutex::new(vec![url_copy])),
                 all_urls: Arc::new(Mutex::new(vec![])),
+                domain_list: Arc::new(vec!["https://example.com".to_string()])
             }
         )
     }
 
     #[test]
     fn url_index_add_one_all_url_test() {
-        let url_index = UrlIndex::new();
+        let url_index = UrlIndex::new(vec!["https://example.com".to_string()]);
         let url = vec!["https://example.com".to_string()];
 
         url_index.add_to_list(url, "https://example.com".to_string());
@@ -424,13 +449,14 @@ mod tests {
                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
                 error_urls: Arc::new(Mutex::new(Vec::new())),
                 all_urls: Arc::new(Mutex::new(vec!["https://example.com".to_string()])),
+                domain_list: Arc::new(vec!["https://example.com".to_string()])
             }
         )
     }
 
     #[test]
     fn url_index_add_multiple_all_url_test() {
-        let url_index = UrlIndex::new();
+        let url_index = UrlIndex::new(vec!["https://example.com".to_string()]);
         let url = vec![
             "https://example.com".to_string(),
             "https://example.com/123".to_string(),
@@ -451,6 +477,7 @@ mod tests {
                     "https://example.com/123".to_string(),
                     "https://example.com/abc".to_string()
                 ])),
+                domain_list: Arc::new(vec!["https://example.com".to_string()])
             }
         )
     }
@@ -474,6 +501,30 @@ mod tests {
                 "https://lulzbot.com/support?search=3d+printers".to_string(),
                 "https://lulzbot.com/3d-printers/".to_string()
             ]
+        );
+    }
+
+    #[test]
+    fn filter_domains_test() {
+        let domains = vec!["https://lulzbot.com".to_string(), "https://www.lulzbot.com".to_string(), "https://shop.lulzbot.com".to_string(), "https://learn.lulzbot.com".to_string()];
+        let url_index = UrlIndex::new(domains);
+
+        let urls: Vec<String> = vec![
+            "https://lulzbot.com/3d-printers/".to_string(),
+            "https://makerbot.com/3d-printers/".to_string(),
+            "https://shop.lulzbot.com/3d-printers/".to_string(),
+            "http://learn.lulzbot.com/learn/".to_string(),
+            "/learn/here".to_string(),
+        ];
+
+        assert_eq!(
+            url_index.filter_domains(urls),
+            vec![
+            "https://lulzbot.com/3d-printers/".to_string(),
+            "https://shop.lulzbot.com/3d-printers/".to_string(),
+            "http://learn.lulzbot.com/learn/".to_string(),
+            "/learn/here".to_string(),
+        ]
         );
     }
 }
