@@ -173,6 +173,30 @@ async fn get_href(mut element: Element) -> Result<Option<String>, WebScrapingErr
 //     web_client.new_window(true)
 // }
 
+fn format_urls(mut domain: String, mut urls: Vec<String>) -> Vec<String> { 
+    let mut urls_iter = urls.iter_mut();
+
+    //remove '/' from end of domain if needed: 
+    while domain.ends_with("/") {
+        domain.pop();
+    }
+
+    
+    while let Some(url) = urls_iter.next() {
+        // Remove # to the end -> 
+        if let Some(idx) = url.find("#") {
+            let ( url_replacement , _ ) = url.split_at(idx);
+            *url = url_replacement.to_string();
+        }
+        
+        if !url.starts_with(&domain){
+            //add domain to url
+            (*url).insert_str(0, &domain);
+        }
+    }
+    urls
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -361,5 +385,14 @@ mod tests {
             error_urls: Arc::new(Mutex::new(Vec::new())),  
             all_urls: Arc::new(Mutex::new( vec!["https://example.com".to_string(), "https://facebook.com/".to_string(), "https://google.com".to_string()])),  
         })
+    }
+
+    #[test]
+    fn format_urls_test(){
+        let urls: Vec<String> = vec!["#pop-up".to_string(), "/about-me".to_string(), "/support?search=3d+printers".to_string(), "https://lulzbot.com/3d-printers/".to_string()];
+
+        let domain = "https://lulzbot.com/".to_string();
+
+        assert_eq!(format_urls(domain, urls), vec!["https://lulzbot.com".to_string(), "https://lulzbot.com/about-me".to_string(), "https://lulzbot.com/support?search=3d+printers".to_string(), "https://lulzbot.com/3d-printers/".to_string()]);
     }
 }
