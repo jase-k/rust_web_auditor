@@ -108,9 +108,10 @@ impl UrlIndex {
         self
     }
 
-    fn add_to_list(&self, url: Vec<String>) -> &Self {
+    fn add_to_list(&self, urls: Vec<String>) -> &Self {
         let mut url_vec_guard = self.all_urls.lock().unwrap();
-        let mut url_iter = url.iter();
+        urls = format_urls(urls);
+        let mut url_iter = urls.iter();
         while let Some(url_string) = url_iter.next() {
             (*url_vec_guard).push(url_string.to_string());
         }
