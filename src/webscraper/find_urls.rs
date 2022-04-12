@@ -109,11 +109,15 @@ impl UrlIndex {
 
     fn add_to_list(&self, mut urls: Vec<String>, host: String) -> &Self {
         let mut url_vec_guard = self.all_urls.lock().unwrap();
+
         urls = format_urls(host, urls);
+        
         let mut url_iter = urls.iter();
+        
         while let Some(url_string) = url_iter.next() {
             (*url_vec_guard).push(url_string.to_string());
         }
+        
         self
     }
 }
@@ -123,12 +127,15 @@ pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
     let url_index = UrlIndex::new();
 
     let mut web_client: Client = open_new_client().await?;
+
     let host = "https://facebook.com/";
+   
     web_client.goto(&host).await?;
 
     println!("{}", web_client.current_url().await?);
 
     let all_urls = find_urls(&mut web_client).await?;
+
     url_index.add_to_list(all_urls, host.to_string());
 
     web_client.close().await;
@@ -150,6 +157,7 @@ async fn find_urls(web_client: &mut Client) -> Result<Vec<String>, WebScrapingEr
     let locator = Locator::XPath("//a");
 
     let all_anchors = web_client.find_all(locator).await?; //Vec<Elements>
+
     let mut all_anchors_iter = all_anchors.iter();
 
     let mut all_urls: Vec<String> = Vec::new();
@@ -185,6 +193,7 @@ fn format_urls(mut domain: String, mut urls: Vec<String>) -> Vec<String> {
         // Remove # to the end ->
         if let Some(idx) = url.find("#") {
             let (url_replacement, _) = url.split_at(idx);
+            
             *url = url_replacement.to_string();
         }
 
