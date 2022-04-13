@@ -71,12 +71,18 @@ impl PartialEq<Url> for Url {
 
 #[derive(Debug)]
 pub struct UrlIndex {
-    bad_urls: Arc<Mutex<Vec<Url>>>,        //400-499 response status
-    good_urls: Arc<Mutex<Vec<Url>>>,       //200-299 response status
-    redirected_urls: Arc<Mutex<Vec<Url>>>, //300-399 response status
-    error_urls: Arc<Mutex<Vec<Url>>>,      //500+ response status Internal errors.
-    all_urls: Arc<Mutex<Vec<String>>>,     //Strings of all urls
-    domain_list: Arc<Vec<String>>
+    ///urls with a 400-499 response status
+    bad_urls: Arc<Mutex<Vec<Url>>>,        
+    ///urls with a 200-299 response status
+    good_urls: Arc<Mutex<Vec<Url>>>,       
+    ///urls with a 300-399 response status
+    redirected_urls: Arc<Mutex<Vec<Url>>>, 
+    ///urls with a 500+ response status Internal errors.
+    error_urls: Arc<Mutex<Vec<Url>>>,      
+    ///Strings of all urls
+    all_urls: Arc<Mutex<Vec<String>>>,     
+    ///List of domains that are accepted by the crawler (do not include https / http)
+    domain_list: Arc<Vec<String>>          
 }
 
 impl UrlIndex {
@@ -128,15 +134,18 @@ impl UrlIndex {
         let domain_iter = self.domain_list.iter(); 
         urls.into_iter()
             .filter(|url|{
-                let mut should_remove = true;
+                let mut should_keep = false;
 
-                for domain in &domain_iter {
-                    if url.starts_with(domain) {
-                        should_remove = false;
+                for domain in domain_iter.clone() {
+                    if url.contains(domain) {
+                        should_keep = true;
                         break;
-                    } 
+                    } else if url.starts_with("/"){
+                        should_keep = true;
+                        break;
+                    }
                 }
-                should_remove
+                should_keep
             })
             .collect()
     }
@@ -506,7 +515,7 @@ mod tests {
 
     #[test]
     fn filter_domains_test() {
-        let domains = vec!["https://lulzbot.com".to_string(), "https://www.lulzbot.com".to_string(), "https://shop.lulzbot.com".to_string(), "https://learn.lulzbot.com".to_string()];
+        let domains = vec!["lulzbot.com".to_string(), "www.lulzbot.com".to_string(), "shop.lulzbot.com".to_string(), "learn.lulzbot.com".to_string()];
         let url_index = UrlIndex::new(domains);
 
         let urls: Vec<String> = vec![
