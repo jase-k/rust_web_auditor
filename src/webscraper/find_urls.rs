@@ -270,6 +270,16 @@ mod tests {
                 return false;
             }
 
+            let self_all_urls = self.all_urls.lock().unwrap();
+            let other_all_urls = other.all_urls.lock().unwrap();
+            if *self_all_urls != *other_all_urls {
+                return false;
+            }
+
+            if *self.domain_list != *other.domain_list {
+                return false;
+            }
+
             return true;
         }
     }
@@ -491,6 +501,36 @@ mod tests {
                     "https://example.com".to_string(),
                     "https://example.com/123".to_string(),
                     "https://example.com/abc".to_string()
+                ])),
+                domain_list: Arc::new(vec!["https://example.com".to_string()])
+            }
+        )
+    }
+
+    #[test]
+    fn url_index_add_test_avoid_duplicates() {
+        let url_index = UrlIndex::new(vec!["https://example.com".to_string()]);
+        let url = vec![
+            "https://example.com".to_string(),
+            "https://example.com/123".to_string(),
+            "https://example.com/abc".to_string(),
+            "https://example.com/123".to_string(),
+            "https://example.com/abc".to_string(),
+        ];
+
+        url_index.add_to_list(url, "https://example.com".to_string());
+
+        assert_eq!(
+            url_index,
+            UrlIndex {
+                bad_urls: Arc::new(Mutex::new(Vec::new())),
+                good_urls: Arc::new(Mutex::new(Vec::new())),
+                redirected_urls: Arc::new(Mutex::new(Vec::new())),
+                error_urls: Arc::new(Mutex::new(Vec::new())),
+                all_urls: Arc::new(Mutex::new(vec![
+                    "https://example.com".to_string(),
+                    "https://example.com/123".to_string(),
+                    "https://example.com/abc".to_string(),
                 ])),
                 domain_list: Arc::new(vec!["https://example.com".to_string()])
             }
