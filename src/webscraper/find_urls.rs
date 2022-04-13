@@ -1,7 +1,7 @@
 use fantoccini::elements::Element;
 use fantoccini::error::{CmdError, NewSessionError};
 use fantoccini::{Client, ClientBuilder, Locator};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 #[derive(Debug)]
 pub enum WebScrapingError {
@@ -118,11 +118,16 @@ impl UrlIndex {
     }
 
     fn add_to_list(&self, mut urls: Vec<String>, host: String) -> &Self {
-        let mut url_vec_guard = self.all_urls.lock().unwrap();
-        urls = self.filter_domains(urls);
-        urls = format_urls(host, urls);
+        let mut url_vec_guard: MutexGuard<Vec<String>> = self.all_urls.lock().unwrap();
+        let mut urls1 = self.filter_domains(urls);
 
-        let mut url_iter = urls.iter();
+        if urls1.len() < 1 {
+            return self
+        }
+
+        let mut urls2 = format_urls(host, urls1);
+
+        let mut url_iter = urls2.iter();
 
         while let Some(url_string) = url_iter.next() {
             (*url_vec_guard).push(url_string.to_string());
@@ -138,6 +143,16 @@ impl UrlIndex {
                 let mut should_keep = false;
 
                 for domain in domain_iter.clone() {
+                    if domain.starts_with("http") {
+                        if url.starts_with(domain){
+                            should_keep = true;
+                            break;
+                        } else {
+                            continue;
+                        }
+                    }
+
+                    //Adds https && http if not included
                     let https = String::from("https://");
                     let http = String::from("http://");
                     if url.starts_with(&(https + domain)) {
@@ -345,7 +360,7 @@ mod tests {
 
     #[test]
     fn url_index_new_test() {
-        let url_index = UrlIndex::new(vec![]);
+        let url_index = UrlIndex::new(vec!["https://example.com".to_string()]);
         assert_eq!(
             url_index,
             UrlIndex {
