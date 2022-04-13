@@ -1,8 +1,8 @@
 use fantoccini::elements::Element;
 use fantoccini::error::{CmdError, NewSessionError};
 use fantoccini::{Client, ClientBuilder, Locator};
-use std::sync::{Arc, Mutex, MutexGuard};
 use std::collections::HashSet;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 #[derive(Debug)]
 pub enum WebScrapingError {
@@ -80,7 +80,7 @@ pub struct UrlIndex {
     ///urls with a 500+ response status Internal errors.
     error_urls: Arc<Mutex<Vec<Url>>>,
     ///Strings of all urls
-    all_urls: Arc<Mutex<Vec<String>>>,
+    all_urls: Arc<Mutex<HashSet<String>>>,
     ///List of domains that are accepted by the crawler (do not include https / http)
     domain_list: Arc<HashSet<String>>,
 }
@@ -95,7 +95,7 @@ impl UrlIndex {
             good_urls: Arc::new(Mutex::new(vec![])),
             redirected_urls: Arc::new(Mutex::new(vec![])),
             error_urls: Arc::new(Mutex::new(vec![])),
-            all_urls: Arc::new(Mutex::new(vec![])),
+            all_urls: Arc::new(Mutex::new(HashSet::new())),
             domain_list: Arc::new(domains),
         }
     }
@@ -119,19 +119,19 @@ impl UrlIndex {
     }
 
     fn add_to_list(&self, mut urls: Vec<String>, host: String) -> &Self {
-        let mut url_vec_guard: MutexGuard<Vec<String>> = self.all_urls.lock().unwrap();
-        let mut urls1 = self.filter_domains(urls);
+        let mut url_vec_guard: MutexGuard<HashSet<String>> = self.all_urls.lock().unwrap();
+        urls = self.filter_domains(urls);
 
-        if urls1.len() < 1 {
-            return self
+        if urls.len() < 1 {
+            return self;
         }
 
-        let mut urls2 = format_urls(host, urls1);
+        urls = format_urls(host, urls);
 
-        let mut url_iter = urls2.iter();
+        let mut url_iter = urls.iter();
 
         while let Some(url_string) = url_iter.next() {
-            (*url_vec_guard).push(url_string.to_string());
+            (*url_vec_guard).insert(url_string.to_string());
         }
 
         self
@@ -145,7 +145,7 @@ impl UrlIndex {
 
                 for domain in domain_iter.clone() {
                     if domain.starts_with("http") {
-                        if url.starts_with(domain){
+                        if url.starts_with(domain) {
                             should_keep = true;
                             break;
                         } else {
@@ -369,7 +369,7 @@ mod tests {
                 good_urls: Arc::new(Mutex::new(Vec::new())),
                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
                 error_urls: Arc::new(Mutex::new(Vec::new())),
-                all_urls: Arc::new(Mutex::new(Vec::new())),
+                all_urls: Arc::new(Mutex::new(HashSet::new())),
                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
             }
         )
@@ -394,7 +394,7 @@ mod tests {
                 good_urls: Arc::new(Mutex::new(vec![url_copy])),
                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
                 error_urls: Arc::new(Mutex::new(Vec::new())),
-                all_urls: Arc::new(Mutex::new(Vec::new())),
+                all_urls: Arc::new(Mutex::new(HashSet::new())),
                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
             }
         )
@@ -419,7 +419,7 @@ mod tests {
                 good_urls: Arc::new(Mutex::new(Vec::new())),
                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
                 error_urls: Arc::new(Mutex::new(Vec::new())),
-                all_urls: Arc::new(Mutex::new(Vec::new())),
+                all_urls: Arc::new(Mutex::new(HashSet::new())),
                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
             }
         )
@@ -444,7 +444,7 @@ mod tests {
                 good_urls: Arc::new(Mutex::new(Vec::new())),
                 redirected_urls: Arc::new(Mutex::new(vec![url_copy])),
                 error_urls: Arc::new(Mutex::new(Vec::new())),
-                all_urls: Arc::new(Mutex::new(Vec::new())),
+                all_urls: Arc::new(Mutex::new(HashSet::new())),
                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
             }
         )
@@ -469,7 +469,7 @@ mod tests {
                 good_urls: Arc::new(Mutex::new(Vec::new())),
                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
                 error_urls: Arc::new(Mutex::new(vec![url_copy])),
-                all_urls: Arc::new(Mutex::new(vec![])),
+                all_urls: Arc::new(Mutex::new(HashSet::from([]))),
                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
             }
         )
@@ -489,7 +489,9 @@ mod tests {
                 good_urls: Arc::new(Mutex::new(Vec::new())),
                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
                 error_urls: Arc::new(Mutex::new(Vec::new())),
-                all_urls: Arc::new(Mutex::new(vec!["https://example.com".to_string()])),
+                all_urls: Arc::new(Mutex::new(HashSet::from([
+                    "https://example.com".to_string()
+                ]))),
                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
             }
         )
@@ -513,11 +515,11 @@ mod tests {
                 good_urls: Arc::new(Mutex::new(Vec::new())),
                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
                 error_urls: Arc::new(Mutex::new(Vec::new())),
-                all_urls: Arc::new(Mutex::new(vec![
+                all_urls: Arc::new(Mutex::new(HashSet::from([
                     "https://example.com".to_string(),
                     "https://example.com/123".to_string(),
                     "https://example.com/abc".to_string()
-                ])),
+                ]))),
                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
             }
         )
@@ -543,11 +545,11 @@ mod tests {
                 good_urls: Arc::new(Mutex::new(Vec::new())),
                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
                 error_urls: Arc::new(Mutex::new(Vec::new())),
-                all_urls: Arc::new(Mutex::new(vec![
+                all_urls: Arc::new(Mutex::new(HashSet::from([
                     "https://example.com".to_string(),
                     "https://example.com/123".to_string(),
                     "https://example.com/abc".to_string(),
-                ])),
+                ]))),
                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
             }
         )
