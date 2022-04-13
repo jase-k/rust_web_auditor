@@ -1,7 +1,6 @@
 use fantoccini::elements::Element;
 use fantoccini::error::{CmdError, NewSessionError};
 use fantoccini::{Client, ClientBuilder, Locator};
-// use no_deadlocks::{Mutex}; // Switch out to std::sync before build
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
@@ -72,21 +71,23 @@ impl PartialEq<Url> for Url {
 #[derive(Debug)]
 pub struct UrlIndex {
     ///urls with a 400-499 response status
-    bad_urls: Arc<Mutex<Vec<Url>>>,        
+    bad_urls: Arc<Mutex<Vec<Url>>>,
     ///urls with a 200-299 response status
-    good_urls: Arc<Mutex<Vec<Url>>>,       
+    good_urls: Arc<Mutex<Vec<Url>>>,
     ///urls with a 300-399 response status
-    redirected_urls: Arc<Mutex<Vec<Url>>>, 
+    redirected_urls: Arc<Mutex<Vec<Url>>>,
     ///urls with a 500+ response status Internal errors.
-    error_urls: Arc<Mutex<Vec<Url>>>,      
+    error_urls: Arc<Mutex<Vec<Url>>>,
     ///Strings of all urls
-    all_urls: Arc<Mutex<Vec<String>>>,     
+    all_urls: Arc<Mutex<Vec<String>>>,
     ///List of domains that are accepted by the crawler (do not include https / http)
-    domain_list: Arc<Vec<String>>          
+    domain_list: Arc<Vec<String>>,
 }
 
 impl UrlIndex {
-    fn new(mut domains: Vec<String> ) -> UrlIndex {
+    /// Creates a new UrlIndex Object
+    /// Must include a Vec of domains that you want to include in the index
+    fn new(domains: Vec<String>) -> UrlIndex {
         //TODO reformat domains to have no "/"
         UrlIndex {
             bad_urls: Arc::new(Mutex::new(vec![])),
@@ -118,29 +119,34 @@ impl UrlIndex {
 
     fn add_to_list(&self, mut urls: Vec<String>, host: String) -> &Self {
         let mut url_vec_guard = self.all_urls.lock().unwrap();
-
+        urls = self.filter_domains(urls);
         urls = format_urls(host, urls);
-        
+
         let mut url_iter = urls.iter();
-        
+
         while let Some(url_string) = url_iter.next() {
             (*url_vec_guard).push(url_string.to_string());
         }
-        
+
         self
     }
 
-    fn filter_domains(&self, mut urls: Vec<String>) -> Vec<String> {
-        let domain_iter = self.domain_list.iter(); 
+    fn filter_domains(&self, urls: Vec<String>) -> Vec<String> {
+        let domain_iter = self.domain_list.iter();
         urls.into_iter()
-            .filter(|url|{
+            .filter(|url| {
                 let mut should_keep = false;
 
                 for domain in domain_iter.clone() {
-                    if url.contains(domain) {
+                    let https = String::from("https://");
+                    let http = String::from("http://");
+                    if url.starts_with(&(https + domain)) {
                         should_keep = true;
                         break;
-                    } else if url.starts_with("/"){
+                    } else if url.starts_with(&(http + domain)) {
+                        should_keep = true;
+                        break;
+                    } else if url.starts_with("/") {
                         should_keep = true;
                         break;
                     }
@@ -152,13 +158,13 @@ impl UrlIndex {
 }
 
 pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
-    // Open web connection
-    let url_index = UrlIndex::new(vec!["https://facebook.com/".to_string()]);
+    let url_index = UrlIndex::new(vec!["facebook.com".to_string()]);
 
+    // Open web connection
     let mut web_client: Client = open_new_client().await?;
 
     let host = "https://facebook.com/";
-   
+
     web_client.goto(&host).await?;
 
     println!("{}", web_client.current_url().await?);
@@ -167,7 +173,7 @@ pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
 
     url_index.add_to_list(all_urls, host.to_string());
 
-    web_client.close().await;
+    web_client.close().await?;
     // Create up to 10 new pages
     // For each url -> parse urls and add to set.
     // -> parse : (response status, site reference, and url)
@@ -515,7 +521,12 @@ mod tests {
 
     #[test]
     fn filter_domains_test() {
-        let domains = vec!["lulzbot.com".to_string(), "www.lulzbot.com".to_string(), "shop.lulzbot.com".to_string(), "learn.lulzbot.com".to_string()];
+        let domains = vec![
+            "lulzbot.com".to_string(),
+            "www.lulzbot.com".to_string(),
+            "shop.lulzbot.com".to_string(),
+            "learn.lulzbot.com".to_string(),
+        ];
         let url_index = UrlIndex::new(domains);
 
         let urls: Vec<String> = vec![
@@ -529,11 +540,41 @@ mod tests {
         assert_eq!(
             url_index.filter_domains(urls),
             vec![
+                "https://lulzbot.com/3d-printers/".to_string(),
+                "https://shop.lulzbot.com/3d-printers/".to_string(),
+                "http://learn.lulzbot.com/learn/".to_string(),
+                "/learn/here".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn filter_domains_test_limit_domains() {
+        let domains = vec![
+            "lulzbot.com".to_string(),
+            "www.lulzbot.com".to_string(),
+            "shop.lulzbot.com".to_string(),
+            "learn.lulzbot.com".to_string(),
+        ];
+        let url_index = UrlIndex::new(domains);
+
+        let urls: Vec<String> = vec![
             "https://lulzbot.com/3d-printers/".to_string(),
+            "https://makerbot.com/3d-printers/".to_string(),
             "https://shop.lulzbot.com/3d-printers/".to_string(),
             "http://learn.lulzbot.com/learn/".to_string(),
+            "http://forum.lulzbot.com/learn/".to_string(),
             "/learn/here".to_string(),
-        ]
+        ];
+
+        assert_eq!(
+            url_index.filter_domains(urls),
+            vec![
+                "https://lulzbot.com/3d-printers/".to_string(),
+                "https://shop.lulzbot.com/3d-printers/".to_string(),
+                "http://learn.lulzbot.com/learn/".to_string(),
+                "/learn/here".to_string(),
+            ]
         );
     }
 }
