@@ -2,6 +2,7 @@ use fantoccini::elements::Element;
 use fantoccini::error::{CmdError, NewSessionError};
 use fantoccini::{Client, ClientBuilder, Locator};
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::collections::HashSet;
 
 #[derive(Debug)]
 pub enum WebScrapingError {
@@ -81,13 +82,13 @@ pub struct UrlIndex {
     ///Strings of all urls
     all_urls: Arc<Mutex<Vec<String>>>,
     ///List of domains that are accepted by the crawler (do not include https / http)
-    domain_list: Arc<Vec<String>>,
+    domain_list: Arc<HashSet<String>>,
 }
 
 impl UrlIndex {
     /// Creates a new UrlIndex Object
     /// Must include a Vec of domains that you want to include in the index
-    fn new(domains: Vec<String>) -> UrlIndex {
+    fn new(domains: HashSet<String>) -> UrlIndex {
         //TODO reformat domains to have no "/"
         UrlIndex {
             bad_urls: Arc::new(Mutex::new(vec![])),
@@ -173,7 +174,7 @@ impl UrlIndex {
 }
 
 pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
-    let url_index = UrlIndex::new(vec!["facebook.com".to_string()]);
+    let url_index = UrlIndex::new(HashSet::from(["facebook.com".to_string()]));
 
     // Open web connection
     let mut web_client: Client = open_new_client().await?;
@@ -360,7 +361,7 @@ mod tests {
 
     #[test]
     fn url_index_new_test() {
-        let url_index = UrlIndex::new(vec!["https://example.com".to_string()]);
+        let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
         assert_eq!(
             url_index,
             UrlIndex {
@@ -369,14 +370,14 @@ mod tests {
                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
                 error_urls: Arc::new(Mutex::new(Vec::new())),
                 all_urls: Arc::new(Mutex::new(Vec::new())),
-                domain_list: Arc::new(vec!["https://example.com".to_string()])
+                domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
             }
         )
     }
 
     #[test]
     fn url_index_add_good_url_test() {
-        let url_index = UrlIndex::new(vec!["https://example.com".to_string()]);
+        let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
         let url = Url::new(
             "https://example.com".to_string(),
             200,
@@ -394,14 +395,14 @@ mod tests {
                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
                 error_urls: Arc::new(Mutex::new(Vec::new())),
                 all_urls: Arc::new(Mutex::new(Vec::new())),
-                domain_list: Arc::new(vec!["https://example.com".to_string()])
+                domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
             }
         )
     }
 
     #[test]
     fn url_index_add_bad_url_test() {
-        let url_index = UrlIndex::new(vec!["https://example.com".to_string()]);
+        let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
         let url = Url::new(
             "https://example.com".to_string(),
             404,
@@ -419,14 +420,14 @@ mod tests {
                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
                 error_urls: Arc::new(Mutex::new(Vec::new())),
                 all_urls: Arc::new(Mutex::new(Vec::new())),
-                domain_list: Arc::new(vec!["https://example.com".to_string()])
+                domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
             }
         )
     }
 
     #[test]
     fn url_index_add_redirected_url_test() {
-        let url_index = UrlIndex::new(vec!["https://example.com".to_string()]);
+        let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
         let url = Url::new(
             "https://example.com".to_string(),
             301,
@@ -444,14 +445,14 @@ mod tests {
                 redirected_urls: Arc::new(Mutex::new(vec![url_copy])),
                 error_urls: Arc::new(Mutex::new(Vec::new())),
                 all_urls: Arc::new(Mutex::new(Vec::new())),
-                domain_list: Arc::new(vec!["https://example.com".to_string()])
+                domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
             }
         )
     }
 
     #[test]
     fn url_index_add_error_url_test() {
-        let url_index = UrlIndex::new(vec!["https://example.com".to_string()]);
+        let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
         let url = Url::new(
             "https://example.com".to_string(),
             500,
@@ -469,14 +470,14 @@ mod tests {
                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
                 error_urls: Arc::new(Mutex::new(vec![url_copy])),
                 all_urls: Arc::new(Mutex::new(vec![])),
-                domain_list: Arc::new(vec!["https://example.com".to_string()])
+                domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
             }
         )
     }
 
     #[test]
     fn url_index_add_one_all_url_test() {
-        let url_index = UrlIndex::new(vec!["https://example.com".to_string()]);
+        let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
         let url = vec!["https://example.com".to_string()];
 
         url_index.add_to_list(url, "https://example.com".to_string());
@@ -489,14 +490,14 @@ mod tests {
                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
                 error_urls: Arc::new(Mutex::new(Vec::new())),
                 all_urls: Arc::new(Mutex::new(vec!["https://example.com".to_string()])),
-                domain_list: Arc::new(vec!["https://example.com".to_string()])
+                domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
             }
         )
     }
 
     #[test]
     fn url_index_add_multiple_all_url_test() {
-        let url_index = UrlIndex::new(vec!["https://example.com".to_string()]);
+        let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
         let url = vec![
             "https://example.com".to_string(),
             "https://example.com/123".to_string(),
@@ -517,14 +518,14 @@ mod tests {
                     "https://example.com/123".to_string(),
                     "https://example.com/abc".to_string()
                 ])),
-                domain_list: Arc::new(vec!["https://example.com".to_string()])
+                domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
             }
         )
     }
 
     #[test]
     fn url_index_add_test_avoid_duplicates() {
-        let url_index = UrlIndex::new(vec!["https://example.com".to_string()]);
+        let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
         let url = vec![
             "https://example.com".to_string(),
             "https://example.com/123".to_string(),
@@ -547,7 +548,7 @@ mod tests {
                     "https://example.com/123".to_string(),
                     "https://example.com/abc".to_string(),
                 ])),
-                domain_list: Arc::new(vec!["https://example.com".to_string()])
+                domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
             }
         )
     }
@@ -576,12 +577,12 @@ mod tests {
 
     #[test]
     fn filter_domains_test() {
-        let domains = vec![
+        let domains = HashSet::from([
             "lulzbot.com".to_string(),
             "www.lulzbot.com".to_string(),
             "shop.lulzbot.com".to_string(),
             "learn.lulzbot.com".to_string(),
-        ];
+        ]);
         let url_index = UrlIndex::new(domains);
 
         let urls: Vec<String> = vec![
@@ -605,13 +606,13 @@ mod tests {
 
     #[test]
     fn filter_domains_test_limit_domains() {
-        let domains = vec![
+        let domains = HashSet::from([
             "lulzbot.com".to_string(),
             "www.lulzbot.com".to_string(),
             "shop.lulzbot.com".to_string(),
             "learn.lulzbot.com".to_string(),
-        ];
-        let url_index = UrlIndex::new(domains);
+        ]);
+        let url_index = UrlIndex::new(HashSet::from(domains));
 
         let urls: Vec<String> = vec![
             "https://lulzbot.com/3d-printers/".to_string(),
