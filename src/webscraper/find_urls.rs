@@ -56,7 +56,12 @@ impl Url {
         self.redirected_to = Some(destination);
         self
     }
-    //TODO: add redirection
+
+    /// Checks for a near equality 
+    /// if self.url == other.url -> Will return true else returns false
+    fn near_eq(&self, other: Url) -> bool {
+        self.url == other.url
+    }
 }
 
 impl PartialEq<Url> for Url {
@@ -65,6 +70,10 @@ impl PartialEq<Url> for Url {
             return false;
         }
         if self.response_code != other.response_code {
+            return false;
+        }
+
+        if self.redirected_to != other.redirected_to {
             return false;
         }
 
@@ -176,30 +185,57 @@ impl UrlIndex {
             })
             .collect()
     }
+
+    // fn get_next_url(&self, index: u32) -> Option<String> {
+    //     let url_vec_guard = self.all_urls.lock().unwrap();
+    //     Some((*url_vec_guard)[index])
+    //     // Some("https://example.com/123".to_string())
+    // }
 }
 
+/// # Purpose 
+/// Return an result with Ok(UrlIndex)
 pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
-    let url_index = UrlIndex::new(HashSet::from(["facebook.com".to_string()]));
+    let url_index = UrlIndex::new(HashSet::from(["https://f3d-shop.forgeflow.io/".to_string()]));
+
+    let host = "https://f3d-shop.forgeflow.io/";
 
     // Open web connection
     let mut web_client: Client = open_new_client().await?;
 
-    let host = "https://facebook.com/";
-
+    // go to first url and add urls to UrlIndex
     web_client.goto(&host).await?;
-
-    println!("{}", web_client.current_url().await?);
-
     let all_urls = find_urls(&mut web_client).await?;
-
     url_index.add_to_list(all_urls, host.to_string());
+    
 
-    web_client.close().await?;
+    // create windows
+    for _ in 0..10 {
+        web_client.new_window(true).await?;
+    };
+
+    // Go to each window and start loading pages from UrlIndex.all_urls
+    // for window_handle in web_client.windows().await? {
+    //     web_client.switch_to_window(window_handle);
+    //     web_client.goto()
+    // }
+
+    if let Ok(web_client_windows) = web_client.windows().await {
+        println!("{:?}", web_client_windows);
+    }
+
+
+    
     // Create up to 10 new pages
     // For each url -> parse urls and add to set.
     // -> parse : (response status, site reference, and url)
     // Err(WebScrapingError::FantocciniCmdErrorr(CmdError))
 
+
+
+
+    
+    web_client.close().await?;
     Ok(url_index)
 }
 
@@ -340,6 +376,36 @@ mod tests {
                 redirected_to: None
             }
         )
+    }
+
+    #[test]
+    fn url_near_equal_test_true() {
+        let url = Url::new(
+            "https://example.com".to_string(),
+            200,
+            "https://google.com/".to_string(),
+        );
+        let other = Url::new(
+            "https://example.com".to_string(),
+            200,
+            "https://google.com/123".to_string(),
+        );
+        assert!(url.near_eq(other));
+    }
+
+    #[test]
+    fn url_near_equal_test_false() {
+        let url = Url::new(
+            "https://example.com".to_string(),
+            200,
+            "https://google.com/".to_string(),
+        );
+        let other = Url::new(
+            "https://example.com/abc".to_string(),
+            200,
+            "https://google.com/123".to_string(),
+        );
+        assert!(!url.near_eq(other));
     }
 
     #[test]
@@ -655,4 +721,42 @@ mod tests {
             redirected_to: Some(String::from("https://example.com/redirected"))
         })
     }
+
+    // #[test]
+    // fn url_index_get_next_url_test() {
+    //     let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
+    //     let url = vec![
+    //         "https://example.com".to_string(),
+    //         "https://example.com/123".to_string(),
+    //         "https://example.com/abc".to_string(),
+    //         "https://example.com/123".to_string(),
+    //         "https://example.com/abc".to_string(),
+    //     ];
+
+    //     url_index.add_to_list(url, "https://example.com".to_string());
+        
+    //     assert_eq!(
+    //         url_index.get_next_url(1),
+    //         Some(String::from("https://example.com/123"))
+    //     )
+    // }
+
+    // #[test]
+    // fn url_index_get_next_url_test_out_of_index() {
+    //     let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
+    //     let url = vec![
+    //         "https://example.com".to_string(),
+    //         "https://example.com/123".to_string(),
+    //         "https://example.com/abc".to_string(),
+    //         "https://example.com/123".to_string(),
+    //         "https://example.com/abc".to_string(),
+    //     ];
+
+    //     url_index.add_to_list(url, "https://example.com".to_string());
+        
+    //     assert_eq!(
+    //         url_index.get_next_url(5),
+    //         None
+    //     )
+    // }
 }
