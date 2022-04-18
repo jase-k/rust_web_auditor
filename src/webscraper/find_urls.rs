@@ -25,13 +25,13 @@ impl From<NewSessionError> for WebScrapingError {
 #[derive(Debug)]
 pub struct Url {
     url: String,
-    response_code: u16,
+    response_code: Option<u16>,
     site_references: Arc<Mutex<Vec<String>>>,
     redirected_to: Option<String>,
 }
 
 impl Url {
-    fn new(url: String, response_code: u16, site_reference: String) -> Url {
+    fn new(url: String, response_code: Option<u16>, site_reference: String) -> Url {
         let mut new_vec = Vec::new();
         new_vec.push(site_reference);
         Url {
@@ -52,7 +52,7 @@ impl Url {
         self
     }
 
-    fn add_redirection(&mut self, destination: String) -> &Self {
+    fn set_redirection(&mut self, destination: String) -> &Self {
         self.redirected_to = Some(destination);
         self
     }
@@ -116,11 +116,11 @@ impl UrlIndex {
 
     fn add(&self, url: Url) -> &Self {
         let mut url_vector;
-        if url.response_code < 300 {
+        if url.response_code < Some(300) {
             url_vector = self.good_urls.lock().unwrap();
-        } else if url.response_code < 400 {
+        } else if url.response_code < Some(400) {
             url_vector = self.redirected_urls.lock().unwrap();
-        } else if url.response_code < 500 {
+        } else if url.response_code < Some(500) {
             url_vector = self.bad_urls.lock().unwrap();
         } else {
             url_vector = self.error_urls.lock().unwrap();
@@ -364,14 +364,14 @@ mod tests {
     fn url_new_test() {
         let url = Url::new(
             "https://example.com".to_string(),
-            200,
+            None,
             "https://google.com/".to_string(),
         );
         assert_eq!(
             url,
             Url {
                 url: "https://example.com".to_string(),
-                response_code: 200,
+                response_code: None,
                 site_references: Arc::new(Mutex::new(vec!["https://google.com/".to_string()])),
                 redirected_to: None
             }
@@ -382,12 +382,12 @@ mod tests {
     fn url_near_equal_test_true() {
         let url = Url::new(
             "https://example.com".to_string(),
-            200,
+            None,
             "https://google.com/".to_string(),
         );
         let other = Url::new(
             "https://example.com".to_string(),
-            200,
+            None,
             "https://google.com/123".to_string(),
         );
         assert!(url.near_eq(other));
@@ -397,12 +397,12 @@ mod tests {
     fn url_near_equal_test_false() {
         let url = Url::new(
             "https://example.com".to_string(),
-            200,
+            None,
             "https://google.com/".to_string(),
         );
         let other = Url::new(
             "https://example.com/abc".to_string(),
-            200,
+            None,
             "https://google.com/123".to_string(),
         );
         assert!(!url.near_eq(other));
@@ -412,7 +412,7 @@ mod tests {
     fn url_add_reference_test() {
         let url = Url::new(
             "https://example.com".to_string(),
-            200,
+            Some(200),
             "https://google.com/".to_string(),
         );
         url.add_reference("https://facebook.com/".to_string());
@@ -420,7 +420,7 @@ mod tests {
             url,
             Url {
                 url: "https://example.com".to_string(),
-                response_code: 200,
+                response_code: Some(200),
                 site_references: Arc::new(Mutex::new(vec![
                     "https://google.com/".to_string(),
                     "https://facebook.com/".to_string()
@@ -451,7 +451,7 @@ mod tests {
         let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
         let url = Url::new(
             "https://example.com".to_string(),
-            200,
+            Some(200),
             "https://google.com/".to_string(),
         );
         let url_copy = url.clone();
@@ -476,7 +476,7 @@ mod tests {
         let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
         let url = Url::new(
             "https://example.com".to_string(),
-            404,
+            Some(404),
             "https://google.com/".to_string(),
         );
         let url_copy = url.clone();
@@ -501,7 +501,7 @@ mod tests {
         let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
         let url = Url::new(
             "https://example.com".to_string(),
-            301,
+            Some(301),
             "https://google.com/".to_string(),
         );
         let url_copy = url.clone();
@@ -526,7 +526,7 @@ mod tests {
         let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
         let url = Url::new(
             "https://example.com".to_string(),
-            500,
+            Some(500),
             "https://google.com/".to_string(),
         );
         let url_copy = url.clone();
@@ -709,14 +709,14 @@ mod tests {
 
     #[test]
     fn url_add_redirection_test() {
-        let mut url = Url::new("https://example.com/base".to_string(), 301, "https://example.com".to_string());
+        let mut url = Url::new("https://example.com/base".to_string(), Some(301), "https://example.com".to_string());
         let destination = String::from("https://example.com/redirected");
 
-        url.add_redirection(destination);
+        url.set_redirection(destination);
 
         assert_eq!(url, Url {
             url: String::from("https://example.com/base"),
-            response_code: 301, 
+            response_code: Some(301), 
             site_references: Arc::new(Mutex::new(vec!["https://example.com".to_string()])),
             redirected_to: Some(String::from("https://example.com/redirected"))
         })
