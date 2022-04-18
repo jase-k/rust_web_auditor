@@ -3,6 +3,8 @@ use fantoccini::error::{CmdError, NewSessionError};
 use fantoccini::{Client, ClientBuilder, Locator};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::hash::{Hash, Hasher};
+
 
 #[derive(Debug)]
 pub enum WebScrapingError {
@@ -82,6 +84,15 @@ impl PartialEq<Url> for Url {
         *self_vec == *other_vec
     }
 }
+impl Eq for Url {}
+
+impl Hash for Url {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.url.hash(state);
+        self.response_code.hash(state);
+        self.redirected_to.hash(state);
+    }
+}
 
 #[derive(Debug)]
 pub struct UrlIndex {
@@ -94,7 +105,7 @@ pub struct UrlIndex {
     ///urls with a 500+ response status Internal errors.
     error_urls: Arc<Mutex<Vec<Url>>>,
     ///Strings of all urls
-    all_urls: Arc<Mutex<HashSet<String>>>,
+    all_urls: Arc<Mutex<HashSet<Url>>>,
     ///List of domains that are accepted by the crawler (do not include https / http)
     domain_list: Arc<HashSet<String>>,
 }
@@ -133,19 +144,21 @@ impl UrlIndex {
     }
 
     fn add_to_list(&self, mut urls: Vec<String>, host: String) -> &Self {
-        let mut url_vec_guard: MutexGuard<HashSet<String>> = self.all_urls.lock().unwrap();
+        let mut url_vec_guard: MutexGuard<HashSet<Url>> = self.all_urls.lock().unwrap();
         urls = self.filter_domains(urls);
 
         if urls.len() < 1 {
             return self;
         }
 
-        urls = format_urls(host, urls);
+        //TODO: refactor host.clone() to accept &String
+        urls = format_urls(host.clone(), urls);
 
         let mut url_iter = urls.iter();
 
+        //TODO: refactor host.clone() to accept &String
         while let Some(url_string) = url_iter.next() {
-            (*url_vec_guard).insert(url_string.to_string());
+            (*url_vec_guard).insert(Url::new(url_string.to_string(), None, host.clone()));
         }
 
         self
@@ -196,7 +209,7 @@ impl UrlIndex {
 /// # Purpose 
 /// Return an result with Ok(UrlIndex)
 pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
-    let url_index = UrlIndex::new(HashSet::from(["https://f3d-shop.forgeflow.io/".to_string()]));
+    let url_index: UrlIndex= UrlIndex::new(HashSet::from(["https://f3d-shop.forgeflow.io/".to_string()]));
 
     let host = "https://f3d-shop.forgeflow.io/";
 
@@ -213,7 +226,11 @@ pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
     for _ in 0..10 {
         web_client.new_window(true).await?;
     };
-
+    
+    // {
+    //     let all_url_list_iter = &*(&url_index).all_urls.lock().unwrap();
+    //     println!("{:?}", &all_url_list_iter.into_iter());
+    // }
     // Go to each window and start loading pages from UrlIndex.all_urls
     // for window_handle in web_client.windows().await? {
     //     web_client.switch_to_window(window_handle);
@@ -553,6 +570,9 @@ mod tests {
 
         url_index.add_to_list(url, "https://example.com".to_string());
 
+        let mut hash_set = HashSet::new();
+        hash_set.insert(Url::new("https://example.com".to_string(), None, "https://example.com".to_string()));
+
         assert_eq!(
             url_index,
             UrlIndex {
@@ -560,9 +580,7 @@ mod tests {
                 good_urls: Arc::new(Mutex::new(Vec::new())),
                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
                 error_urls: Arc::new(Mutex::new(Vec::new())),
-                all_urls: Arc::new(Mutex::new(HashSet::from([
-                    "https://example.com".to_string()
-                ]))),
+                all_urls: Arc::new(Mutex::new(hash_set)),
                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
             }
         )
@@ -579,6 +597,11 @@ mod tests {
 
         url_index.add_to_list(url, "https://example.com".to_string());
 
+        let mut hash_set = HashSet::new();
+        hash_set.insert(Url::new("https://example.com".to_string(), None, "https://example.com".to_string()));
+        hash_set.insert(Url::new("https://example.com/123".to_string(), None, "https://example.com".to_string()));
+        hash_set.insert(Url::new("https://example.com/abc".to_string(), None, "https://example.com".to_string()));
+
         assert_eq!(
             url_index,
             UrlIndex {
@@ -586,11 +609,7 @@ mod tests {
                 good_urls: Arc::new(Mutex::new(Vec::new())),
                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
                 error_urls: Arc::new(Mutex::new(Vec::new())),
-                all_urls: Arc::new(Mutex::new(HashSet::from([
-                    "https://example.com".to_string(),
-                    "https://example.com/123".to_string(),
-                    "https://example.com/abc".to_string()
-                ]))),
+                all_urls: Arc::new(Mutex::new(hash_set)),
                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
             }
         )
@@ -609,6 +628,11 @@ mod tests {
 
         url_index.add_to_list(url, "https://example.com".to_string());
 
+        let mut hash_set = HashSet::new(); 
+        hash_set.insert(Url::new("https://example.com".to_string(), None, "https://example.com".to_string()));
+        hash_set.insert(Url::new("https://example.com/123".to_string(), None, "https://example.com".to_string()));
+        hash_set.insert(Url::new("https://example.com/abc".to_string(), None, "https://example.com".to_string()));
+
         assert_eq!(
             url_index,
             UrlIndex {
@@ -616,11 +640,7 @@ mod tests {
                 good_urls: Arc::new(Mutex::new(Vec::new())),
                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
                 error_urls: Arc::new(Mutex::new(Vec::new())),
-                all_urls: Arc::new(Mutex::new(HashSet::from([
-                    "https://example.com".to_string(),
-                    "https://example.com/123".to_string(),
-                    "https://example.com/abc".to_string(),
-                ]))),
+                all_urls: Arc::new(Mutex::new(hash_set)),
                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
             }
         )
