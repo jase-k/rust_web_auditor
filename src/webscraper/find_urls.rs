@@ -2,14 +2,14 @@ use fantoccini::elements::Element;
 use fantoccini::error::{CmdError, NewSessionError};
 use fantoccini::{Client, ClientBuilder, Locator};
 use std::collections::HashSet;
-use std::sync::{Arc, Mutex, MutexGuard};
 use std::hash::{Hash, Hasher};
-
+use std::sync::{Arc, Mutex, MutexGuard};
 
 #[derive(Debug)]
 pub enum WebScrapingError {
     FantocciniNewSessionError(NewSessionError),
     FantocciniCmdErrorr(CmdError),
+    LockError,
 }
 
 impl From<CmdError> for WebScrapingError {
@@ -59,7 +59,7 @@ impl Url {
         self
     }
 
-    /// Checks for a near equality 
+    /// Checks for a near equality
     /// if self.url == other.url -> Will return true else returns false
     fn near_eq(&self, other: Url) -> bool {
         self.url == other.url
@@ -91,6 +91,25 @@ impl Hash for Url {
         self.url.hash(state);
         self.response_code.hash(state);
         self.redirected_to.hash(state);
+    }
+}
+
+impl Clone for Url {
+    fn clone(&self) -> Url {
+        let mut new_vec = Vec::new();
+        let old_vec = self.site_references.lock().unwrap();
+        let mut old_vec_iter = old_vec.iter();
+
+        while let Some(url) = old_vec_iter.next() {
+            new_vec.push(url.clone());
+        }
+
+        Url {
+            url: self.url.clone(),
+            response_code: self.response_code.clone(),
+            site_references: Arc::new(Mutex::new(new_vec)),
+            redirected_to: self.redirected_to.clone(),
+        }
     }
 }
 
@@ -206,10 +225,13 @@ impl UrlIndex {
     // }
 }
 
-/// # Purpose 
+/// # Purpose
 /// Return an result with Ok(UrlIndex)
 pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
-    let url_index: UrlIndex= UrlIndex::new(HashSet::from(["https://f3d-shop.forgeflow.io/".to_string()]));
+    let url_index: UrlIndex =
+        UrlIndex::new(HashSet::from(
+            ["https://f3d-shop.forgeflow.io/".to_string()],
+        ));
 
     let host = "https://f3d-shop.forgeflow.io/";
 
@@ -220,17 +242,16 @@ pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
     web_client.goto(&host).await?;
     let all_urls = find_urls(&mut web_client).await?;
     url_index.add_to_list(all_urls, host.to_string());
-    
 
     // create windows
     for _ in 0..10 {
         web_client.new_window(true).await?;
-    };
-    
-    // {
-    //     let all_url_list_iter = &*(&url_index).all_urls.lock().unwrap();
-    //     println!("{:?}", &all_url_list_iter.into_iter());
-    // }
+    }
+
+    {
+        let all_url_iter = filter_out_tested_domains(&url_index);
+    }
+
     // Go to each window and start loading pages from UrlIndex.all_urls
     // for window_handle in web_client.windows().await? {
     //     web_client.switch_to_window(window_handle);
@@ -241,19 +262,31 @@ pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
         println!("{:?}", web_client_windows);
     }
 
-
-    
     // Create up to 10 new pages
     // For each url -> parse urls and add to set.
     // -> parse : (response status, site reference, and url)
     // Err(WebScrapingError::FantocciniCmdErrorr(CmdError))
 
-
-
-
-    
     web_client.close().await?;
     Ok(url_index)
+}
+
+fn filter_out_tested_domains<'a>(
+    url_index: &'a UrlIndex,
+) -> Result<impl Iterator<Item = Url>, WebScrapingError> {
+    if let Ok(mutex_guard_result) = url_index.all_urls.lock() {
+        let hash_clone = (*mutex_guard_result).clone();
+        let hash_iter = hash_clone.into_iter().filter(|url| {
+            if let Some(_) = url.response_code {
+                return false;
+            } else {
+                return true;
+            }
+        });
+        return Ok(hash_iter);
+    } else {
+        return Err(WebScrapingError::LockError);
+    }
 }
 
 async fn open_new_client() -> Result<Client, WebScrapingError> {
@@ -355,25 +388,6 @@ mod tests {
             }
 
             return true;
-        }
-    }
-
-    impl Clone for Url {
-        fn clone(&self) -> Url {
-            let mut new_vec = Vec::new();
-            let old_vec = self.site_references.lock().unwrap();
-            let mut old_vec_iter = old_vec.iter();
-
-            while let Some(url) = old_vec_iter.next() {
-                new_vec.push(url.clone());
-            }
-
-            Url {
-                url: self.url.clone(),
-                response_code: self.response_code.clone(),
-                site_references: Arc::new(Mutex::new(new_vec)),
-                redirected_to: self.redirected_to.clone(),
-            }
         }
     }
 
@@ -571,7 +585,11 @@ mod tests {
         url_index.add_to_list(url, "https://example.com".to_string());
 
         let mut hash_set = HashSet::new();
-        hash_set.insert(Url::new("https://example.com".to_string(), None, "https://example.com".to_string()));
+        hash_set.insert(Url::new(
+            "https://example.com".to_string(),
+            None,
+            "https://example.com".to_string(),
+        ));
 
         assert_eq!(
             url_index,
@@ -598,9 +616,21 @@ mod tests {
         url_index.add_to_list(url, "https://example.com".to_string());
 
         let mut hash_set = HashSet::new();
-        hash_set.insert(Url::new("https://example.com".to_string(), None, "https://example.com".to_string()));
-        hash_set.insert(Url::new("https://example.com/123".to_string(), None, "https://example.com".to_string()));
-        hash_set.insert(Url::new("https://example.com/abc".to_string(), None, "https://example.com".to_string()));
+        hash_set.insert(Url::new(
+            "https://example.com".to_string(),
+            None,
+            "https://example.com".to_string(),
+        ));
+        hash_set.insert(Url::new(
+            "https://example.com/123".to_string(),
+            None,
+            "https://example.com".to_string(),
+        ));
+        hash_set.insert(Url::new(
+            "https://example.com/abc".to_string(),
+            None,
+            "https://example.com".to_string(),
+        ));
 
         assert_eq!(
             url_index,
@@ -628,10 +658,22 @@ mod tests {
 
         url_index.add_to_list(url, "https://example.com".to_string());
 
-        let mut hash_set = HashSet::new(); 
-        hash_set.insert(Url::new("https://example.com".to_string(), None, "https://example.com".to_string()));
-        hash_set.insert(Url::new("https://example.com/123".to_string(), None, "https://example.com".to_string()));
-        hash_set.insert(Url::new("https://example.com/abc".to_string(), None, "https://example.com".to_string()));
+        let mut hash_set = HashSet::new();
+        hash_set.insert(Url::new(
+            "https://example.com".to_string(),
+            None,
+            "https://example.com".to_string(),
+        ));
+        hash_set.insert(Url::new(
+            "https://example.com/123".to_string(),
+            None,
+            "https://example.com".to_string(),
+        ));
+        hash_set.insert(Url::new(
+            "https://example.com/abc".to_string(),
+            None,
+            "https://example.com".to_string(),
+        ));
 
         assert_eq!(
             url_index,
@@ -729,17 +771,24 @@ mod tests {
 
     #[test]
     fn url_add_redirection_test() {
-        let mut url = Url::new("https://example.com/base".to_string(), Some(301), "https://example.com".to_string());
+        let mut url = Url::new(
+            "https://example.com/base".to_string(),
+            Some(301),
+            "https://example.com".to_string(),
+        );
         let destination = String::from("https://example.com/redirected");
 
         url.set_redirection(destination);
 
-        assert_eq!(url, Url {
-            url: String::from("https://example.com/base"),
-            response_code: Some(301), 
-            site_references: Arc::new(Mutex::new(vec!["https://example.com".to_string()])),
-            redirected_to: Some(String::from("https://example.com/redirected"))
-        })
+        assert_eq!(
+            url,
+            Url {
+                url: String::from("https://example.com/base"),
+                response_code: Some(301),
+                site_references: Arc::new(Mutex::new(vec!["https://example.com".to_string()])),
+                redirected_to: Some(String::from("https://example.com/redirected"))
+            }
+        )
     }
 
     // #[test]
@@ -754,7 +803,7 @@ mod tests {
     //     ];
 
     //     url_index.add_to_list(url, "https://example.com".to_string());
-        
+
     //     assert_eq!(
     //         url_index.get_next_url(1),
     //         Some(String::from("https://example.com/123"))
@@ -773,7 +822,7 @@ mod tests {
     //     ];
 
     //     url_index.add_to_list(url, "https://example.com".to_string());
-        
+
     //     assert_eq!(
     //         url_index.get_next_url(5),
     //         None
