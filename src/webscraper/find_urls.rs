@@ -27,7 +27,7 @@ pub struct Url {
     url: String,
     response_code: u16,
     site_references: Arc<Mutex<Vec<String>>>,
-    redirected_to: Box<Option<Url>>,
+    redirected_to: Option<String>,
 }
 
 impl Url {
@@ -38,7 +38,7 @@ impl Url {
             url: url,
             response_code: response_code,
             site_references: Arc::new(Mutex::new(new_vec)),
-            redirected_to: Box::new(None),
+            redirected_to: None,
         }
     }
 
@@ -49,6 +49,11 @@ impl Url {
             (*mutex_guard).push(site_reference);
         }
         println!("{:?}", self);
+        self
+    }
+
+    fn add_redirection(&mut self, destination: String) -> &Self {
+        self.redirected_to = Some(destination);
         self
     }
     //TODO: add redirection
@@ -332,7 +337,7 @@ mod tests {
                 url: "https://example.com".to_string(),
                 response_code: 200,
                 site_references: Arc::new(Mutex::new(vec!["https://google.com/".to_string()])),
-                redirected_to: Box::new(None)
+                redirected_to: None
             }
         )
     }
@@ -354,7 +359,7 @@ mod tests {
                     "https://google.com/".to_string(),
                     "https://facebook.com/".to_string()
                 ])),
-                redirected_to: Box::new(None)
+                redirected_to: None
             }
         )
     }
@@ -634,5 +639,20 @@ mod tests {
                 "/learn/here".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn url_add_redirection_test() {
+        let mut url = Url::new("https://example.com/base".to_string(), 301, "https://example.com".to_string());
+        let destination = String::from("https://example.com/redirected");
+
+        url.add_redirection(destination);
+
+        assert_eq!(url, Url {
+            url: String::from("https://example.com/base"),
+            response_code: 301, 
+            site_references: Arc::new(Mutex::new(vec!["https://example.com".to_string()])),
+            redirected_to: Some(String::from("https://example.com/redirected"))
+        })
     }
 }
