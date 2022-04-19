@@ -791,6 +791,55 @@ mod tests {
         )
     }
 
+    #[test]
+    fn filter_out_tested_domains_test() {
+       
+        let mut hash_set = HashSet::new();
+        hash_set.insert(Url::new(
+            "https://example.com".to_string(),
+            None,
+            "https://example.com".to_string(),
+        ));
+        hash_set.insert(Url::new(
+            "https://example.com/123".to_string(),
+            Some(200),
+            "https://example.com".to_string(),
+        ));
+        hash_set.insert(Url::new(
+            "https://example.com/abc".to_string(),
+            None,
+            "https://example.com".to_string(),
+        ));
+        hash_set.insert(Url::new(
+            "https://example.com/def".to_string(),
+            None,
+            "https://example.com".to_string(),
+        ));
+        hash_set.insert(Url::new(
+            "https://example.com/hij".to_string(),
+            Some(500),
+            "https://example.com".to_string(),
+        ));
+       
+        let url_index = UrlIndex {
+                bad_urls: Arc::new(Mutex::new(Vec::new())),
+                good_urls: Arc::new(Mutex::new(Vec::new())),
+                redirected_urls: Arc::new(Mutex::new(Vec::new())),
+                error_urls: Arc::new(Mutex::new(Vec::new())),
+                all_urls: Arc::new(Mutex::new(hash_set)),
+                domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
+            };
+        if let Ok(mut result) = filter_out_tested_domains(&url_index) {
+            while let Some(url) = result.next() {
+                if url.response_code != None {
+                    assert!(false)
+                }
+            }
+        } else {
+            assert!(false)
+        }
+    }
+
     // #[test]
     // fn url_index_get_next_url_test() {
     //     let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
