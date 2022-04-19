@@ -236,7 +236,9 @@ pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
     let host = "https://f3d-shop.forgeflow.io/";
 
     // Open web connection
+    println!("Opening Up Web Client");
     let mut web_client: Client = open_new_client().await?;
+    println!("Connected to Web Client");
 
     // go to first url and add urls to UrlIndex
     web_client.goto(&host).await?;
@@ -244,19 +246,28 @@ pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
     url_index.add_to_list(all_urls, host.to_string());
 
     // create windows
+    println!("Creating Windows");
     for _ in 0..10 {
         web_client.new_window(true).await?;
     }
+    println!("Done Creating Windows");
 
-    {
-        let all_url_iter = filter_out_tested_domains(&url_index);
+    // while all_url_iter length is not 0 : 
+
+    //Filters out all domains that we've already checked out 
+    let all_url_iter_result = filter_out_tested_domains(&url_index);
+
+    if let Ok(mut url_iter) = all_url_iter_result {        
+        // Go to each window and start loading pages from UrlIndex.all_urls
+        for window_handle in web_client.windows().await? {
+            if let Some(url) = url_iter.next() {
+                web_client.switch_to_window(window_handle).await?;
+                web_client.goto(&url.url).await?
+            } else {
+                break;
+            }
+        }
     }
-
-    // Go to each window and start loading pages from UrlIndex.all_urls
-    // for window_handle in web_client.windows().await? {
-    //     web_client.switch_to_window(window_handle);
-    //     web_client.goto()
-    // }
 
     if let Ok(web_client_windows) = web_client.windows().await {
         println!("{:?}", web_client_windows);
@@ -272,6 +283,7 @@ pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
 }
 
 /// Return an iterator of Urls that have not been tested yet. 
+/// If empty result.next() == None
 fn filter_out_tested_domains<'a>(
     url_index: &'a UrlIndex,
 ) -> Result<impl Iterator<Item = Url>, WebScrapingError> {
