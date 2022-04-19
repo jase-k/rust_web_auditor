@@ -271,6 +271,7 @@ pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
     Ok(url_index)
 }
 
+/// Return an iterator of Urls that have not been tested yet. 
 fn filter_out_tested_domains<'a>(
     url_index: &'a UrlIndex,
 ) -> Result<impl Iterator<Item = Url>, WebScrapingError> {
@@ -835,6 +836,38 @@ mod tests {
                     assert!(false)
                 }
             }
+        } else {
+            assert!(false)
+        }
+    }
+    
+    #[test]
+    fn filter_out_tested_domains_test_final() {
+       
+        let mut hash_set = HashSet::new();
+        hash_set.insert(Url::new(
+            "https://example.com/123".to_string(),
+            Some(200),
+            "https://example.com".to_string(),
+        ));
+        hash_set.insert(Url::new(
+            "https://example.com/hij".to_string(),
+            Some(500),
+            "https://example.com".to_string(),
+        ));
+       
+        let url_index = UrlIndex {
+                bad_urls: Arc::new(Mutex::new(Vec::new())),
+                good_urls: Arc::new(Mutex::new(Vec::new())),
+                redirected_urls: Arc::new(Mutex::new(Vec::new())),
+                error_urls: Arc::new(Mutex::new(Vec::new())),
+                all_urls: Arc::new(Mutex::new(hash_set)),
+                domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
+            };
+
+        if let Ok(mut result) = filter_out_tested_domains(&url_index) {
+            // Should return an empty iterator. 
+            assert_eq!(result.next(), None)
         } else {
             assert!(false)
         }
