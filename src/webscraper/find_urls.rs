@@ -59,6 +59,11 @@ impl Url {
         self
     }
 
+    fn set_response_code(&mut self, response_code: u16) -> &Self {
+        self.response_code = Some(response_code);
+        self
+    }
+
     /// Checks for a near equality
     /// if self.url == other.url -> Will return true else returns false
     fn near_eq(&self, other: Url) -> bool {
@@ -182,7 +187,7 @@ impl UrlIndex {
 
         self
     }
-
+    /// Checks urls to make sure they are in the trusted domains
     fn filter_domains(&self, urls: Vec<String>) -> Vec<String> {
         let domain_iter = self.domain_list.iter();
         urls.into_iter()
@@ -224,7 +229,6 @@ impl UrlIndex {
     //     // Some("https://example.com/123".to_string())
     // }
 }
-
 /// # Purpose
 /// Return an result with Ok(UrlIndex)
 pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
@@ -233,39 +237,34 @@ pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
             ["https://f3d-shop.forgeflow.io/".to_string()],
         ));
 
-    let host = "https://f3d-shop.forgeflow.io/";
+    //Setting Up Entry Point
+    url_index.add_to_list(vec!["https://f3d-shop.forgeflow.io/".to_string()], "https://f3d-shop.forgeflow.io/".to_string());
 
     // Open web connection
     println!("Opening Up Web Client");
     let mut web_client: Client = open_new_client().await?;
     println!("Connected to Web Client");
+    
+    'outer: loop {
+        // TODO: 
+        //Print current index to files
 
-    // go to first url and add urls to UrlIndex
-    web_client.goto(&host).await?;
-    let all_urls = find_urls(&mut web_client).await?;
-    url_index.add_to_list(all_urls, host.to_string());
-
-    // create windows
-    println!("Creating Windows");
-    for _ in 0..10 {
-        web_client.new_window(true).await?;
-    }
-    println!("Done Creating Windows");
-
-    // while all_url_iter length is not 0 : 
-
-    //Filters out all domains that we've already checked out 
-    let all_url_iter_result = filter_out_tested_domains(&url_index);
-
-    if let Ok(mut url_iter) = all_url_iter_result {        
-        // Go to each window and start loading pages from UrlIndex.all_urls
-        for window_handle in web_client.windows().await? {
-            if let Some(url) = url_iter.next() {
-                web_client.switch_to_window(window_handle).await?;
-                web_client.goto(&url.url).await?
-            } else {
-                break;
+        //Filters out all domains that we've already checked out 
+        let all_url_iter_result = filter_out_tested_domains(&url_index);
+        
+        if let Ok(mut url_iter) = all_url_iter_result {        
+            'inner: loop{
+                if let Some(url) = url_iter.next() {
+                    println!("{:?}", &url);
+                    find_all_urls_from_webpage(&url.url, &mut web_client, &url_index).await?;
+                } else {
+                    println!("breaking!");
+                    break 'inner;
+                }
             }
+        } else {
+            println!("Error Filtering domains!");
+            break 'outer;
         }
     }
 
@@ -282,6 +281,42 @@ pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
     Ok(url_index)
 }
 
+async fn find_all_urls_from_webpage(url_to_visit: &String, web_client: &mut Client, url_index: &UrlIndex) -> Result<(), WebScrapingError> {
+    web_client.goto(url_to_visit).await?; 
+    // get response code and add url to the index
+    let current_url = web_client.current_url().await?;
+    if is_404(web_client).await? {
+        println!("Response 404 from: {}", url_to_visit);
+    } else if url_to_visit == current_url.as_str() {
+        println!("Response 200 from: {}", url_to_visit);
+    } else {
+        println!("Response 300 from: {}", url_to_visit);
+    }
+
+    let locator = Locator::XPath("//a");
+    
+    let all_urls = find_urls(web_client).await?;
+    
+    if let Some(host) = current_url.domain() {
+        url_index.add_to_list(all_urls, host.to_string());
+    } 
+    
+    Ok(())
+}
+
+async fn is_404(web_client: &mut Client) -> Result<bool, WebScrapingError> {
+    let locator = Locator::XPath("//title");
+
+    let mut title = web_client.find(locator).await?; //Vec<Elements>
+
+    let title_text = title.text().await?;
+
+    if title_text.contains("Page Not Found") {
+        return Ok(true)
+    } else {
+        return Ok(false)
+    }
+} 
 /// Return an iterator of Urls that have not been tested yet. 
 /// If empty result.next() == None
 fn filter_out_tested_domains<'a>(
@@ -332,10 +367,6 @@ async fn get_href(mut element: Element) -> Result<Option<String>, WebScrapingErr
     Ok(element.attr("href").await?)
 }
 
-// async fn open_new_tab(web_client: &mut Client) -> Result<NewWindowResponse, WebScrapingError> {
-//     web_client.new_window(true)
-// }
-
 fn format_urls(mut domain: String, mut urls: Vec<String>) -> Vec<String> {
     let mut urls_iter = urls.iter_mut();
 
@@ -343,19 +374,31 @@ fn format_urls(mut domain: String, mut urls: Vec<String>) -> Vec<String> {
     while domain.ends_with("/") {
         domain.pop();
     }
-
+    
     while let Some(url) = urls_iter.next() {
         // Remove # to the end ->
         if let Some(idx) = url.find("#") {
             let (url_replacement, _) = url.split_at(idx);
-
+            
             *url = url_replacement.to_string();
+            println!("Url #2: {}", &url);
         }
 
-        if !url.starts_with(&domain) {
-            //add domain to url
-            (*url).insert_str(0, &domain);
+        if !domain.starts_with("http") {
+            //Adds https && http if not included
+            let https = String::from("https://");
+            let http = String::from("http://");
+            if !url.starts_with(&(https.clone() + &domain)) && !url.starts_with(&(http + &domain)) {
+                (*url).insert_str(0, &(https + &domain));
+            } 
+        } else {
+            if !url.starts_with(&domain) {
+                //add domain to url
+                (*url).insert_str(0, &domain);
+                println!("New Url: {}", &url);
+            }
         }
+
     }
     urls
 }
@@ -724,6 +767,28 @@ mod tests {
     }
 
     #[test]
+    fn format_urls_test_no_https() {
+        let urls: Vec<String> = vec![
+            "#pop-up".to_string(),
+            "/about-me".to_string(),
+            "/support?search=3d+printers".to_string(),
+            "https://lulzbot.com/3d-printers/".to_string(),
+        ];
+
+        let domain = "lulzbot.com/".to_string();
+
+        assert_eq!(
+            format_urls(domain, urls),
+            vec![
+                "https://lulzbot.com".to_string(),
+                "https://lulzbot.com/about-me".to_string(),
+                "https://lulzbot.com/support?search=3d+printers".to_string(),
+                "https://lulzbot.com/3d-printers/".to_string()
+            ]
+        );
+    }
+
+    #[test]
     fn filter_domains_test() {
         let domains = HashSet::from([
             "lulzbot.com".to_string(),
@@ -885,41 +950,25 @@ mod tests {
         }
     }
 
-    // #[test]
-    // fn url_index_get_next_url_test() {
-    //     let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
-    //     let url = vec![
-    //         "https://example.com".to_string(),
-    //         "https://example.com/123".to_string(),
-    //         "https://example.com/abc".to_string(),
-    //         "https://example.com/123".to_string(),
-    //         "https://example.com/abc".to_string(),
-    //     ];
+    #[test]
+    fn url_set_response_code_test() {
+       let mut url = Url::new(
+            "https://example.com".to_string(),
+            None,
+            "https://google.com/".to_string(),
+        );
+        
+        url.set_response_code(404);
 
-    //     url_index.add_to_list(url, "https://example.com".to_string());
+        assert_eq!(
+            url,
+            Url {
+                url: "https://example.com".to_string(),
+                response_code: Some(404),
+                site_references: Arc::new(Mutex::new(vec!["https://google.com/".to_string()])),
+                redirected_to: None
+            }
+        )
+    }
 
-    //     assert_eq!(
-    //         url_index.get_next_url(1),
-    //         Some(String::from("https://example.com/123"))
-    //     )
-    // }
-
-    // #[test]
-    // fn url_index_get_next_url_test_out_of_index() {
-    //     let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
-    //     let url = vec![
-    //         "https://example.com".to_string(),
-    //         "https://example.com/123".to_string(),
-    //         "https://example.com/abc".to_string(),
-    //         "https://example.com/123".to_string(),
-    //         "https://example.com/abc".to_string(),
-    //     ];
-
-    //     url_index.add_to_list(url, "https://example.com".to_string());
-
-    //     assert_eq!(
-    //         url_index.get_next_url(5),
-    //         None
-    //     )
-    // }
 }
