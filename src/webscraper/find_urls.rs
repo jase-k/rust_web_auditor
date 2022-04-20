@@ -251,12 +251,12 @@ pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
 
         //Filters out all domains that we've already checked out 
         let all_url_iter_result = filter_out_tested_domains(&url_index);
-        
         if let Ok(mut url_iter) = all_url_iter_result {        
+            println!("Found {:?} more urls to check. ", url_iter.size_hint());
             'inner: loop{
-                if let Some(url) = url_iter.next() {
+                if let Some(mut url) = url_iter.next() {
                     println!("{:?}", &url);
-                    find_all_urls_from_webpage(&url.url, &mut web_client, &url_index).await?;
+                    find_all_urls_from_webpage(url, &mut web_client, &url_index).await?;
                 } else {
                     println!("breaking!");
                     break 'inner;
@@ -281,26 +281,38 @@ pub async fn index_urls() -> Result<UrlIndex, WebScrapingError> {
     Ok(url_index)
 }
 
-async fn find_all_urls_from_webpage(url_to_visit: &String, web_client: &mut Client, url_index: &UrlIndex) -> Result<(), WebScrapingError> {
-    web_client.goto(url_to_visit).await?; 
+async fn find_all_urls_from_webpage(url_to_visit: Url, web_client: &mut Client, url_index: &UrlIndex) -> Result<(), WebScrapingError> {
+    web_client.goto(&url_to_visit.url).await?; 
     // get response code and add url to the index
-    let current_url = web_client.current_url().await?;
-    if is_404(web_client).await? {
-        println!("Response 404 from: {}", url_to_visit);
-    } else if url_to_visit == current_url.as_str() {
-        println!("Response 200 from: {}", url_to_visit);
-    } else {
-        println!("Response 300 from: {}", url_to_visit);
-    }
+    add_to_index(url_to_visit, web_client, url_index).await?;
 
     let locator = Locator::XPath("//a");
     
     let all_urls = find_urls(web_client).await?;
     
+    let current_url = web_client.current_url().await?;
     if let Some(host) = current_url.domain() {
         url_index.add_to_list(all_urls, host.to_string());
     } 
     
+    Ok(())
+}
+
+async fn add_to_index(mut url: Url, web_client: &mut Client, url_index: &UrlIndex) -> Result<(), WebScrapingError> {
+    let current_url = web_client.current_url().await?;
+    if is_404(web_client).await? {
+        url.set_response_code(404);
+        println!("Response 404 from: {}", url.url);
+    } else if url.url == current_url.as_str() {
+        url.set_response_code(200);
+        println!("Response 200 from: {}", url.url);
+    } else {
+        url.set_response_code(300);
+        url.set_redirection(current_url.to_string());
+        println!("Response 300 from: {}", url.url);
+    }
+
+    url_index.add(url);
     Ok(())
 }
 
