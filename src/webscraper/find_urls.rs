@@ -328,669 +328,149 @@ async fn find_all_urls_from_webpage(
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-
-//     impl PartialEq for UrlIndex {
-//         fn eq(&self, other: &UrlIndex) -> bool {
-//             let self_bad_urls = self.bad_urls.lock().unwrap();
-//             let other_bad_urls = other.bad_urls.lock().unwrap();
-//             if *self_bad_urls != *other_bad_urls {
-//                 return false;
-//             }
-
-//             let self_good_urls = self.good_urls.lock().unwrap();
-//             let other_good_urls = other.good_urls.lock().unwrap();
-//             if *self_good_urls != *other_good_urls {
-//                 return false;
-//             }
-
-//             let self_redirected_urls = self.redirected_urls.lock().unwrap();
-//             let other_redirected_urls = other.redirected_urls.lock().unwrap();
-//             if *self_redirected_urls != *other_redirected_urls {
-//                 return false;
-//             }
-
-//             let self_error_urls = self.error_urls.lock().unwrap();
-//             let other_error_urls = other.error_urls.lock().unwrap();
-//             if *self_error_urls != *other_error_urls {
-//                 return false;
-//             }
-
-//             let self_all_urls = self.all_urls.lock().unwrap();
-//             let other_all_urls = other.all_urls.lock().unwrap();
-//             if *self_all_urls != *other_all_urls {
-//                 return false;
-//             }
-
-//             if *self.domain_list != *other.domain_list {
-//                 return false;
-//             }
-
-//             return true;
-//         }
-//     }
-
-//     #[test]
-//     fn url_new_test() {
-//         let url = Url::new(
-//             "https://example.com".to_string(),
-//             None,
-//             "https://google.com/".to_string(),
-//         );
-//         assert_eq!(
-//             url,
-//             Url {
-//                 url: "https://example.com".to_string(),
-//                 response_code: None,
-//                 site_references: Arc::new(Mutex::new(vec!["https://google.com/".to_string()])),
-//                 redirected_to: None
-//             }
-//         )
-//     }
-
-//     #[test]
-//     fn url_near_equal_test_true() {
-//         let url = Url::new(
-//             "https://example.com".to_string(),
-//             None,
-//             "https://google.com/".to_string(),
-//         );
-//         let other = Url::new(
-//             "https://example.com".to_string(),
-//             None,
-//             "https://google.com/123".to_string(),
-//         );
-//         assert!(url.near_eq(other));
-//     }
-
-//     #[test]
-//     fn url_near_equal_test_false() {
-//         let url = Url::new(
-//             "https://example.com".to_string(),
-//             None,
-//             "https://google.com/".to_string(),
-//         );
-//         let other = Url::new(
-//             "https://example.com/abc".to_string(),
-//             None,
-//             "https://google.com/123".to_string(),
-//         );
-//         assert!(!url.near_eq(other));
-//     }
-
-//     #[test]
-//     fn url_add_reference_test() {
-//         let url = Url::new(
-//             "https://example.com".to_string(),
-//             Some(200),
-//             "https://google.com/".to_string(),
-//         );
-//         url.add_reference("https://facebook.com/".to_string());
-//         assert_eq!(
-//             url,
-//             Url {
-//                 url: "https://example.com".to_string(),
-//                 response_code: Some(200),
-//                 site_references: Arc::new(Mutex::new(vec![
-//                     "https://google.com/".to_string(),
-//                     "https://facebook.com/".to_string()
-//                 ])),
-//                 redirected_to: None
-//             }
-//         )
-//     }
-
-//     #[test]
-//     fn url_index_new_test() {
-//         let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
-//         assert_eq!(
-//             url_index,
-//             UrlIndex {
-//                 bad_urls: Arc::new(Mutex::new(Vec::new())),
-//                 good_urls: Arc::new(Mutex::new(Vec::new())),
-//                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
-//                 error_urls: Arc::new(Mutex::new(Vec::new())),
-//                 all_urls: Arc::new(Mutex::new(HashSet::new())),
-//                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
-//             }
-//         )
-//     }
-
-//     #[test]
-//     fn url_index_add_good_url_test() {
-//         let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
-//         let url = Url::new(
-//             "https://example.com".to_string(),
-//             Some(200),
-//             "https://google.com/".to_string(),
-//         );
-//         let url_copy = url.clone();
-
-//         url_index.add(url);
-
-//         assert_eq!(
-//             url_index,
-//             UrlIndex {
-//                 bad_urls: Arc::new(Mutex::new(Vec::new())),
-//                 good_urls: Arc::new(Mutex::new(vec![url_copy])),
-//                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
-//                 error_urls: Arc::new(Mutex::new(Vec::new())),
-//                 all_urls: Arc::new(Mutex::new(HashSet::new())),
-//                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
-//             }
-//         )
-//     }
-//     //Should keep urls on the all_url list while pointing a reference or clone to the good url list
-//     #[test]
-//     fn url_index_add_good_url_test_stays_on_all_urls() {
-//         let url_index = UrlIndex::new(HashSet::from(["https://f3d-shop.forgeflow.io/".to_string()]));
-//         url_index.add_to_list(vec!["https://f3d-shop.forgeflow.io/".to_string()], "https://f3d-shop.forgeflow.io/".to_string());
-
-//         let all_url_iter_result = filter_out_tested_domains(&url_index);
-//         if let Ok(mut url_iter) = all_url_iter_result {
-//             if let Some(mut url) = url_iter.next() {
-//                 url.set_response_code(200);
-//                 url_index.add(url);
-//             } else {
-//                 assert!(false);
-//             }
-//         } else {
-//             assert!(false);
-//         }
-
-//         let url_ghost = Url {
-//                     url: "https://f3d-shop.forgeflow.io/".to_string(),
-//                     response_code: Some(200),
-//                     site_references: Arc::new(Mutex::new(vec!["https://f3d-shop.forgeflow.io/".to_string()])),
-//                     redirected_to: None,
-//                 };
-//         assert_eq!(
-//             url_index,
-//             UrlIndex {
-//                 bad_urls: Arc::new(Mutex::new(Vec::new())),
-//                 good_urls: Arc::new(Mutex::new(vec![url_ghost.clone()])),
-//                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
-//                 error_urls: Arc::new(Mutex::new(Vec::new())),
-//                 all_urls: Arc::new(Mutex::new(HashSet::from([url_ghost]))),
-//                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
-//             }
-//         )
-//     }
-
-//     #[test]
-//     fn url_index_add_bad_url_test() {
-//         let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
-//         let url = Url::new(
-//             "https://example.com".to_string(),
-//             Some(404),
-//             "https://google.com/".to_string(),
-//         );
-//         let url_copy = url.clone();
-
-//         url_index.add(url);
-
-//         assert_eq!(
-//             url_index,
-//             UrlIndex {
-//                 bad_urls: Arc::new(Mutex::new(vec![url_copy])),
-//                 good_urls: Arc::new(Mutex::new(Vec::new())),
-//                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
-//                 error_urls: Arc::new(Mutex::new(Vec::new())),
-//                 all_urls: Arc::new(Mutex::new(HashSet::new())),
-//                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
-//             }
-//         )
-//     }
-
-//     #[test]
-//     fn url_index_add_redirected_url_test() {
-//         let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
-//         let url = Url::new(
-//             "https://example.com".to_string(),
-//             Some(301),
-//             "https://google.com/".to_string(),
-//         );
-//         let url_copy = url.clone();
-
-//         url_index.add(url);
-
-//         assert_eq!(
-//             url_index,
-//             UrlIndex {
-//                 bad_urls: Arc::new(Mutex::new(Vec::new())),
-//                 good_urls: Arc::new(Mutex::new(Vec::new())),
-//                 redirected_urls: Arc::new(Mutex::new(vec![url_copy])),
-//                 error_urls: Arc::new(Mutex::new(Vec::new())),
-//                 all_urls: Arc::new(Mutex::new(HashSet::new())),
-//                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
-//             }
-//         )
-//     }
-
-//     #[test]
-//     fn url_index_add_error_url_test() {
-//         let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
-//         let url = Url::new(
-//             "https://example.com".to_string(),
-//             Some(500),
-//             "https://google.com/".to_string(),
-//         );
-//         let url_copy = url.clone();
-
-//         url_index.add(url);
-
-//         assert_eq!(
-//             url_index,
-//             UrlIndex {
-//                 bad_urls: Arc::new(Mutex::new(Vec::new())),
-//                 good_urls: Arc::new(Mutex::new(Vec::new())),
-//                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
-//                 error_urls: Arc::new(Mutex::new(vec![url_copy])),
-//                 all_urls: Arc::new(Mutex::new(HashSet::from([]))),
-//                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
-//             }
-//         )
-//     }
-
-//     #[test]
-//     fn url_index_add_one_all_url_test() {
-//         let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
-//         let url = vec!["https://example.com".to_string()];
-
-//         url_index.add_to_list(url, "https://example.com".to_string());
-
-//         let mut hash_set = HashSet::new();
-//         hash_set.insert(Url::new(
-//             "https://example.com".to_string(),
-//             None,
-//             "https://example.com".to_string(),
-//         ));
-
-//         assert_eq!(
-//             url_index,
-//             UrlIndex {
-//                 bad_urls: Arc::new(Mutex::new(Vec::new())),
-//                 good_urls: Arc::new(Mutex::new(Vec::new())),
-//                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
-//                 error_urls: Arc::new(Mutex::new(Vec::new())),
-//                 all_urls: Arc::new(Mutex::new(hash_set)),
-//                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
-//             }
-//         )
-//     }
-
-//     #[test]
-//     fn url_index_add_multiple_all_url_test() {
-//         let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
-//         let url = vec![
-//             "https://example.com".to_string(),
-//             "https://example.com/123".to_string(),
-//             "https://example.com/abc".to_string(),
-//         ];
-
-//         url_index.add_to_list(url, "https://example.com".to_string());
-
-//         let mut hash_set = HashSet::new();
-//         hash_set.insert(Url::new(
-//             "https://example.com".to_string(),
-//             None,
-//             "https://example.com".to_string(),
-//         ));
-//         hash_set.insert(Url::new(
-//             "https://example.com/123".to_string(),
-//             None,
-//             "https://example.com".to_string(),
-//         ));
-//         hash_set.insert(Url::new(
-//             "https://example.com/abc".to_string(),
-//             None,
-//             "https://example.com".to_string(),
-//         ));
-
-//         assert_eq!(
-//             url_index,
-//             UrlIndex {
-//                 bad_urls: Arc::new(Mutex::new(Vec::new())),
-//                 good_urls: Arc::new(Mutex::new(Vec::new())),
-//                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
-//                 error_urls: Arc::new(Mutex::new(Vec::new())),
-//                 all_urls: Arc::new(Mutex::new(hash_set)),
-//                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
-//             }
-//         )
-//     }
-
-//     #[test]
-//     fn url_index_add_test_avoid_duplicates() {
-//         let url_index = UrlIndex::new(HashSet::from(["https://example.com".to_string()]));
-//         let url = vec![
-//             "https://example.com".to_string(),
-//             "https://example.com/123".to_string(),
-//             "https://example.com/abc".to_string(),
-//             "https://example.com/123".to_string(),
-//             "https://example.com/abc".to_string(),
-//         ];
-
-//         url_index.add_to_list(url, "https://example.com".to_string());
-
-//         let mut hash_set = HashSet::new();
-//         hash_set.insert(Url::new(
-//             "https://example.com".to_string(),
-//             None,
-//             "https://example.com".to_string(),
-//         ));
-//         hash_set.insert(Url::new(
-//             "https://example.com/123".to_string(),
-//             None,
-//             "https://example.com".to_string(),
-//         ));
-//         hash_set.insert(Url::new(
-//             "https://example.com/abc".to_string(),
-//             None,
-//             "https://example.com".to_string(),
-//         ));
-
-//         assert_eq!(
-//             url_index,
-//             UrlIndex {
-//                 bad_urls: Arc::new(Mutex::new(Vec::new())),
-//                 good_urls: Arc::new(Mutex::new(Vec::new())),
-//                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
-//                 error_urls: Arc::new(Mutex::new(Vec::new())),
-//                 all_urls: Arc::new(Mutex::new(hash_set)),
-//                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
-//             }
-//         )
-//     }
-
-//     #[test]
-//     fn format_urls_test() {
-//         let urls: Vec<String> = vec![
-//             "#pop-up".to_string(),
-//             "/about-me".to_string(),
-//             "/support?search=3d+printers".to_string(),
-//             "https://lulzbot.com/3d-printers/".to_string(),
-//         ];
-
-//         let domain = "https://lulzbot.com/".to_string();
-
-//         assert_eq!(
-//             format_urls(domain, urls),
-//             vec![
-//                 "https://lulzbot.com".to_string(),
-//                 "https://lulzbot.com/about-me".to_string(),
-//                 "https://lulzbot.com/support?search=3d+printers".to_string(),
-//                 "https://lulzbot.com/3d-printers/".to_string()
-//             ]
-//         );
-//     }
-
-//     #[test]
-//     fn format_urls_test_no_https() {
-//         let urls: Vec<String> = vec![
-//             "#pop-up".to_string(),
-//             "/about-me".to_string(),
-//             "/support?search=3d+printers".to_string(),
-//             "https://lulzbot.com/3d-printers/".to_string(),
-//         ];
-
-//         let domain = "lulzbot.com/".to_string();
-
-//         assert_eq!(
-//             format_urls(domain, urls),
-//             vec![
-//                 "https://lulzbot.com".to_string(),
-//                 "https://lulzbot.com/about-me".to_string(),
-//                 "https://lulzbot.com/support?search=3d+printers".to_string(),
-//                 "https://lulzbot.com/3d-printers/".to_string()
-//             ]
-//         );
-//     }
-
-//     #[test]
-//     fn filter_domains_test() {
-//         let domains = HashSet::from([
-//             "lulzbot.com".to_string(),
-//             "www.lulzbot.com".to_string(),
-//             "shop.lulzbot.com".to_string(),
-//             "learn.lulzbot.com".to_string(),
-//         ]);
-//         let url_index = UrlIndex::new(domains);
-
-//         let urls: Vec<String> = vec![
-//             "https://lulzbot.com/3d-printers/".to_string(),
-//             "https://makerbot.com/3d-printers/".to_string(),
-//             "https://shop.lulzbot.com/3d-printers/".to_string(),
-//             "http://learn.lulzbot.com/learn/".to_string(),
-//             "/learn/here".to_string(),
-//         ];
-
-//         assert_eq!(
-//             url_index.filter_domains(urls),
-//             vec![
-//                 "https://lulzbot.com/3d-printers/".to_string(),
-//                 "https://shop.lulzbot.com/3d-printers/".to_string(),
-//                 "http://learn.lulzbot.com/learn/".to_string(),
-//                 "/learn/here".to_string(),
-//             ]
-//         );
-//     }
-
-//     #[test]
-//     fn filter_domains_test_limit_domains() {
-//         let domains = HashSet::from([
-//             "lulzbot.com".to_string(),
-//             "www.lulzbot.com".to_string(),
-//             "shop.lulzbot.com".to_string(),
-//             "learn.lulzbot.com".to_string(),
-//         ]);
-//         let url_index = UrlIndex::new(HashSet::from(domains));
-
-//         let urls: Vec<String> = vec![
-//             "https://lulzbot.com/3d-printers/".to_string(),
-//             "https://makerbot.com/3d-printers/".to_string(),
-//             "https://shop.lulzbot.com/3d-printers/".to_string(),
-//             "http://learn.lulzbot.com/learn/".to_string(),
-//             "http://forum.lulzbot.com/learn/".to_string(),
-//             "/learn/here".to_string(),
-//         ];
-
-//         assert_eq!(
-//             url_index.filter_domains(urls),
-//             vec![
-//                 "https://lulzbot.com/3d-printers/".to_string(),
-//                 "https://shop.lulzbot.com/3d-printers/".to_string(),
-//                 "http://learn.lulzbot.com/learn/".to_string(),
-//                 "/learn/here".to_string(),
-//             ]
-//         );
-//     }
-
-//     #[test]
-//     fn url_add_redirection_test() {
-//         let mut url = Url::new(
-//             "https://example.com/base".to_string(),
-//             Some(301),
-//             "https://example.com".to_string(),
-//         );
-//         let destination = String::from("https://example.com/redirected");
-
-//         url.set_redirection(destination);
-
-//         assert_eq!(
-//             url,
-//             Url {
-//                 url: String::from("https://example.com/base"),
-//                 response_code: Some(301),
-//                 site_references: Arc::new(Mutex::new(vec!["https://example.com".to_string()])),
-//                 redirected_to: Some(String::from("https://example.com/redirected"))
-//             }
-//         )
-//     }
-
-//     #[test]
-//     fn filter_out_tested_domains_test() {
-
-//         let mut hash_set = HashSet::new();
-//         hash_set.insert(Url::new(
-//             "https://example.com".to_string(),
-//             None,
-//             "https://example.com".to_string(),
-//         ));
-//         hash_set.insert(Url::new(
-//             "https://example.com/123".to_string(),
-//             Some(200),
-//             "https://example.com".to_string(),
-//         ));
-//         hash_set.insert(Url::new(
-//             "https://example.com/abc".to_string(),
-//             None,
-//             "https://example.com".to_string(),
-//         ));
-//         hash_set.insert(Url::new(
-//             "https://example.com/def".to_string(),
-//             None,
-//             "https://example.com".to_string(),
-//         ));
-//         hash_set.insert(Url::new(
-//             "https://example.com/hij".to_string(),
-//             Some(500),
-//             "https://example.com".to_string(),
-//         ));
-
-//         let url_index = UrlIndex {
-//                 bad_urls: Arc::new(Mutex::new(Vec::new())),
-//                 good_urls: Arc::new(Mutex::new(Vec::new())),
-//                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
-//                 error_urls: Arc::new(Mutex::new(Vec::new())),
-//                 all_urls: Arc::new(Mutex::new(hash_set)),
-//                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
-//             };
-//         if let Ok(mut result) = filter_out_tested_domains(&url_index) {
-//             while let Some(url) = result.next() {
-//                 if url.response_code != None {
-//                     assert!(false)
-//                 }
-//             }
-//         } else {
-//             assert!(false)
-//         }
-//     }
-
-//     #[test]
-//     fn filter_out_tested_domains_test_final() {
-
-//         let mut hash_set = HashSet::new();
-//         hash_set.insert(Url::new(
-//             "https://example.com/123".to_string(),
-//             Some(200),
-//             "https://example.com".to_string(),
-//         ));
-//         hash_set.insert(Url::new(
-//             "https://example.com/hij".to_string(),
-//             Some(500),
-//             "https://example.com".to_string(),
-//         ));
-
-//         let url_index = UrlIndex {
-//                 bad_urls: Arc::new(Mutex::new(Vec::new())),
-//                 good_urls: Arc::new(Mutex::new(Vec::new())),
-//                 redirected_urls: Arc::new(Mutex::new(Vec::new())),
-//                 error_urls: Arc::new(Mutex::new(Vec::new())),
-//                 all_urls: Arc::new(Mutex::new(hash_set)),
-//                 domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
-//             };
-
-//         if let Ok(mut result) = filter_out_tested_domains(&url_index) {
-//             // Should return an empty iterator.
-//             assert_eq!(result.next(), None)
-//         } else {
-//             assert!(false)
-//         }
-//     }
-
-//     #[test]
-//     fn url_set_response_code_test() {
-//        let mut url = Url::new(
-//             "https://example.com".to_string(),
-//             None,
-//             "https://google.com/".to_string(),
-//         );
-
-//         url.set_response_code(404);
-
-//         assert_eq!(
-//             url,
-//             Url {
-//                 url: "https://example.com".to_string(),
-//                 response_code: Some(404),
-//                 site_references: Arc::new(Mutex::new(vec!["https://google.com/".to_string()])),
-//                 redirected_to: None
-//             }
-//         )
-//     }
-
-//     // #[test]
-//     // fn url_index_write_to_file_test() {
-//     //     let good_url1 = Url {
-//     //         url: "https://example.com/good-urls".to_string(),
-//     //         response_code: Some(200),
-//     //         site_references: Arc::new(Mutex::new(vec!["https://example.com".to_string()])),
-//     //         redirected_to: None
-//     //     };
-//     //     let good_url2 = Url {
-//     //         url: "https://example.com/good-urls?q=how%20do%20i%20know".to_string(),
-//     //         response_code: Some(200),
-//     //         site_references: Arc::new(Mutex::new(vec!["https://example.com".to_string()])),
-//     //         redirected_to: None
-//     //     };
-//     //     let bad_url1 = Url {
-//     //         url: "https://example.com/bad-urls".to_string(),
-//     //         response_code: Some(404),
-//     //         site_references: Arc::new(Mutex::new(vec!["https://example.com".to_string()])),
-//     //         redirected_to: None
-//     //     };
-//     //     let bad_url2 = Url {
-//     //         url: "https://example.com/bad-urls?q=how%20do%20i%20know".to_string(),
-//     //         response_code: Some(404),
-//     //         site_references: Arc::new(Mutex::new(vec!["https://example.com".to_string()])),
-//     //         redirected_to: None
-//     //     };
-//     //     let redirected_url1 = Url {
-//     //         url: "https://example.com/redirected-urls".to_string(),
-//     //         response_code: Some(300),
-//     //         site_references: Arc::new(Mutex::new(vec!["https://example.com".to_string()])),
-//     //         redirected_to: Some("https://example.com/redirected-here".to_string())
-//     //     };
-//     //     let redirected_url2 = Url {
-//     //         url: "https://example.com/redirected-urls?q=how%20do%20i%20know".to_string(),
-//     //         response_code: Some(300),
-//     //         site_references: Arc::new(Mutex::new(vec!["https://example.com".to_string()])),
-//     //         redirected_to: Some("https://example.com/redirected-here".to_string())
-//     //     };
-//     //     let error_url1 = Url {
-//     //         url: "https://example.com/error-urls".to_string(),
-//     //         response_code: Some(500),
-//     //         site_references: Arc::new(Mutex::new(vec!["https://example.com".to_string()])),
-//     //         redirected_to: None
-//     //     };
-//     //     let error_url2 = Url {
-//     //         url: "https://example.com/error-urls?q=how%20do%20i%20know".to_string(),
-//     //         response_code: Some(500),
-//     //         site_references: Arc::new(Mutex::new(vec!["https://example.com".to_string()])),
-//     //         redirected_to: None
-//     //     };
-//     //     let hash_set = HashSet::from([good_url1, good_url2, bad_url1, bad_url2, redirected_url1, redirected_url2, error_url1, error_url2]);
-
-//     //     let url_index = UrlIndex {
-//     //             bad_urls: Arc::new(Mutex::new(vec![bad_url1, bad_url2])),
-//     //             good_urls: Arc::new(Mutex::new(vec![good_url1, good_url2])),
-//     //             redirected_urls: Arc::new(Mutex::new(vec![redirected_url1, redirected_url2])),
-//     //             error_urls: Arc::new(Mutex::new(vec![error_url1, error_url2])),
-//     //             all_urls: Arc::new(Mutex::new(hash_set)),
-//     //             domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
-//     //         };
-//     // }
-// }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn url_new_test() {
+        let url = Url::new(
+            "https://example.com".to_string(),
+            None,
+            "https://google.com/".to_string(),
+        );
+        assert_eq!(
+            url,
+            Url {
+                full_path: "https://example.com".to_string(),
+                response_code: None,
+                site_references: vec!["https://google.com/".to_string()],
+                redirected_to: None
+            }
+        )
+    }
+
+    #[test]
+    fn format_urls_test() {
+        let urls: Vec<String> = vec![
+            "#pop-up".to_string(),
+            "/about-me".to_string(),
+            "/support?search=3d+printers".to_string(),
+            "https://lulzbot.com/3d-printers/".to_string(),
+        ];
+
+        let domain = "https://lulzbot.com/".to_string();
+
+        assert_eq!(
+            format_urls(domain, urls),
+            vec![
+                "https://lulzbot.com".to_string(),
+                "https://lulzbot.com/about-me".to_string(),
+                "https://lulzbot.com/support?search=3d+printers".to_string(),
+                "https://lulzbot.com/3d-printers/".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn format_urls_test_no_https() {
+        let urls: Vec<String> = vec![
+            "#pop-up".to_string(),
+            "/about-me".to_string(),
+            "/support?search=3d+printers".to_string(),
+            "https://lulzbot.com/3d-printers/".to_string(),
+        ];
+
+        let domain = "lulzbot.com/".to_string();
+
+        assert_eq!(
+            format_urls(domain, urls),
+            vec![
+                "https://lulzbot.com".to_string(),
+                "https://lulzbot.com/about-me".to_string(),
+                "https://lulzbot.com/support?search=3d+printers".to_string(),
+                "https://lulzbot.com/3d-printers/".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn filter_domains_test() {
+        let domains = vec![
+            "lulzbot.com".to_string(),
+            "www.lulzbot.com".to_string(),
+            "shop.lulzbot.com".to_string(),
+            "learn.lulzbot.com".to_string(),
+        ];
+
+        let urls: Vec<String> = vec![
+            "https://lulzbot.com/3d-printers/".to_string(),
+            "https://makerbot.com/3d-printers/".to_string(),
+            "https://shop.lulzbot.com/3d-printers/".to_string(),
+            "http://learn.lulzbot.com/learn/".to_string(),
+            "/learn/here".to_string(),
+        ];
+
+        assert_eq!(
+            filter_domains(urls, domains),
+            vec![
+                "https://lulzbot.com/3d-printers/".to_string(),
+                "https://shop.lulzbot.com/3d-printers/".to_string(),
+                "http://learn.lulzbot.com/learn/".to_string(),
+                "/learn/here".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn filter_domains_test_limit_domains() {
+        let domains = vec![
+            "lulzbot.com".to_string(),
+            "www.lulzbot.com".to_string(),
+            "shop.lulzbot.com".to_string(),
+            "learn.lulzbot.com".to_string(),
+        ];
+
+        let urls: Vec<String> = vec![
+            "https://lulzbot.com/3d-printers/".to_string(),
+            "https://makerbot.com/3d-printers/".to_string(),
+            "https://shop.lulzbot.com/3d-printers/".to_string(),
+            "http://learn.lulzbot.com/learn/".to_string(),
+            "http://forum.lulzbot.com/learn/".to_string(),
+            "/learn/here".to_string(),
+        ];
+
+        assert_eq!(
+            filter_domains(urls, domains),
+            vec![
+                "https://lulzbot.com/3d-printers/".to_string(),
+                "https://shop.lulzbot.com/3d-printers/".to_string(),
+                "http://learn.lulzbot.com/learn/".to_string(),
+                "/learn/here".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn url_add_redirection_test() {
+        let mut url = Url::new(
+            "https://example.com/base".to_string(),
+            Some(301),
+            "https://example.com".to_string(),
+        );
+        let destination = String::from("https://example.com/redirected");
+
+        url.set_redirection(destination);
+
+        assert_eq!(
+            url,
+            Url {
+                full_path: String::from("https://example.com/base"),
+                response_code: Some(301),
+                site_references: vec!["https://example.com".to_string()],
+                redirected_to: Some(String::from("https://example.com/redirected"))
+            }
+        )
+    }
+
+}

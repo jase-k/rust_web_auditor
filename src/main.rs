@@ -15,7 +15,7 @@ async fn main() -> Result<(), WebScrapingError> {
             println!("{:?}", res);
             // Print to Files
             // let res_iter = res.into_values();
-            if let Ok(mut good_urls_file) = fs::File::options().append(false).create(true).open("./good_urls.json") {
+            if let Ok(mut good_urls_file) = fs::File::options().append(false).create(true).open(".data/good_urls.json") {
                 if let Ok(string) = serde_json::to_string(&res) {
                     good_urls_file.write(string.as_bytes());
                 } 
