@@ -1,9 +1,8 @@
 mod webscraper;
-use webscraper::find_urls::{index_urls, UrlIndex, WebScrapingError};
+use webscraper::find_urls_copy::{index_urls, WebScrapingError};
 
 #[tokio::main]
 async fn main() -> Result<(), WebScrapingError> {
-    let result: UrlIndex = index_urls().await?;
-    println!("URL Index: {:?}", result);
+    index_urls("https://f3d-shop.forgeflow.io/".to_string(), vec!["https://f3d-shop.forgeflow.io/".to_string()]).await?;
     Ok(())
 }
