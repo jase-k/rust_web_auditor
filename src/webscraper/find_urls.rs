@@ -1,14 +1,19 @@
+use async_recursion::async_recursion;
 use fantoccini::elements::Element;
 use fantoccini::error::{CmdError, NewSessionError};
 use fantoccini::{Client, ClientBuilder, Locator};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::io::Write;
+use std::path::Path;
 
 #[derive(Debug)]
 pub enum WebScrapingError {
     FantocciniNewSessionError(NewSessionError),
     FantocciniCmdErrorr(CmdError),
     FormattingUrlError,
+    WritingToFileError,
 }
 
 impl From<CmdError> for WebScrapingError {
@@ -71,12 +76,11 @@ impl Url {
     }
 }
 
-/// # Purpose
-/// Return an result with Ok(UrlIndex)
+/// Public function
 pub async fn index_urls(
     starting_url: String,
     domains: Vec<String>,
-) -> Result<HashMap<String, Url>, WebScrapingError> {
+) -> Result<(), WebScrapingError> {
     let first_url = Url::new(starting_url.clone(), None, starting_url.clone());
 
     let url_hash_set: HashSet<String> = HashSet::from([starting_url.clone()]);
@@ -92,16 +96,42 @@ pub async fn index_urls(
 
     // TODO:
     //Print url_index to file
+    write_to_file(final_index)?;
 
-    if let Ok(web_client_windows) = web_client.windows().await {
-        println!("{:?}", web_client_windows);
-    }
-
+    println!("Closing to Web Client");
     web_client.close().await?;
-    Ok(final_index)
+    println!("Closed to Web Client");
+
+    Ok(())
 }
 
-use async_recursion::async_recursion;
+/// Print to file data/all_urls.json
+fn write_to_file(hash_map: HashMap<String, Url>) -> Result<(), WebScrapingError> {
+    if let Err(_) = fs::DirBuilder::new().recursive(true).create("./data") {
+        println!("Trouble creating data directory!");
+        return Err(WebScrapingError::WritingToFileError);
+    } 
+    if let Ok(mut good_urls_file) = fs::File::options()
+    .write(true)
+    .create(true)
+    .open(Path::new("./data/all_urls.json"))
+    {
+        if let Ok(string) = serde_json::to_string(&hash_map) {
+            if let Ok(_) = good_urls_file.write(string.as_bytes()) {
+                Ok(())
+            } else {
+                println!("Trouble writing data!");
+                Err(WebScrapingError::WritingToFileError)
+            }
+        } else {
+            println!("Trouble Parsing data!");
+            Err(WebScrapingError::WritingToFileError)
+        }
+    } else {
+        println!("Trouble Opening File!");
+        Err(WebScrapingError::WritingToFileError)
+    }
+}
 
 #[async_recursion]
 async fn create_index(
@@ -120,8 +150,7 @@ async fn create_index(
         if let Some(url_object) = url_index.get(&url) {
             // println!("{:?}", url_object);
             //If Url contains Some response code we know we already visited this url
-            if let Some(code) = url_object.response_code {
-                println!("Found response code: {}", code);
+            if let Some(_) = url_object.response_code {
                 continue;
             } else {
                 should_return = false;
@@ -232,12 +261,10 @@ fn add_to_list(
 ) -> Result<Vec<String>, WebScrapingError> {
     urls = filter_domains(urls, domain_list);
 
-    //TODO: refactor host.clone() to accept &String
     urls = format_urls(current_domain, urls);
 
     let mut url_iter = urls.iter();
 
-    //TODO: refactor host.clone() to accept &String
     while let Some(url_string) = url_iter.next() {
         if !hash_map.contains_key(&url_string.to_string()) {
             let url_object = Url::new(url_string.to_string(), None, host.clone());
@@ -253,8 +280,8 @@ fn add_to_list(
 
     Ok(urls)
 }
-/// Checks urls to make sure they are in the trusted domains
 
+/// Checks urls to make sure they are in the trusted domains
 fn filter_domains(urls: Vec<String>, domain_list: Vec<String>) -> Vec<String> {
     let domain_iter = domain_list.iter();
     urls.into_iter()
