@@ -1,9 +1,8 @@
 use fantoccini::elements::Element;
 use fantoccini::error::{CmdError, NewSessionError};
 use fantoccini::{Client, ClientBuilder, Locator};
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use serde::{Serialize, Deserialize};
-
 
 #[derive(Debug)]
 pub enum WebScrapingError {
@@ -23,8 +22,7 @@ impl From<NewSessionError> for WebScrapingError {
         Self::FantocciniNewSessionError(e)
     }
 }
-//Need to implement formatting for writing to csv -> 
-// Url, Response Code,  
+
 #[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
 pub struct Url {
     response_code: Option<u16>,
@@ -85,7 +83,6 @@ pub async fn index_urls(
 
     let url_index: HashMap<String, Url> = HashMap::from([(starting_url, first_url)]);
 
-    // Open web connection with webdriver (fantoccinni crate)
     println!("Opening Up Web Client");
     let mut web_client: Client = open_new_client().await?;
     println!("Connected to Web Client");
@@ -452,7 +449,7 @@ mod tests {
     }
 
     #[test]
-    fn url_add_redirection_test() {
+    fn url_set_redirection_test() {
         let mut url = Url::new(
             "https://example.com/base".to_string(),
             Some(301),
@@ -473,4 +470,25 @@ mod tests {
         )
     }
 
+    #[test]
+    fn url_add_reference_test() {
+        let mut url = Url::new(
+            "https://example.com/base".to_string(),
+            Some(301),
+            "https://example.com".to_string(),
+        );
+        let destination = String::from("https://example.com/redirected");
+
+        url.add_reference(destination.clone());
+
+        assert_eq!(
+            url,
+            Url {
+                full_path: String::from("https://example.com/base"),
+                response_code: Some(301),
+                site_references: vec!["https://example.com".to_string(), destination.to_string()],
+                redirected_to: None
+            }
+        )
+    }
 }
