@@ -1,14 +1,15 @@
 use fantoccini::elements::Element;
 use fantoccini::error::{CmdError, NewSessionError};
 use fantoccini::{Client, ClientBuilder, Locator};
-use std::collections::{ HashSet, HashMap };
+use std::collections::{HashMap, HashSet};
+use serde::{Serialize, Deserialize};
+
 
 #[derive(Debug)]
 pub enum WebScrapingError {
     FantocciniNewSessionError(NewSessionError),
     FantocciniCmdErrorr(CmdError),
-    FindingDomainError,
-    FormattingUrlError
+    FormattingUrlError,
 }
 
 impl From<CmdError> for WebScrapingError {
@@ -22,8 +23,9 @@ impl From<NewSessionError> for WebScrapingError {
         Self::FantocciniNewSessionError(e)
     }
 }
-
-#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+//Need to implement formatting for writing to csv -> 
+// Url, Response Code,  
+#[derive(Debug, PartialEq, Eq, Clone, Hash, Serialize, Deserialize)]
 pub struct Url {
     response_code: Option<u16>,
     full_path: String,
@@ -71,30 +73,27 @@ impl Url {
     }
 }
 
-
-
-
-
-
 /// # Purpose
 /// Return an result with Ok(UrlIndex)
-pub async fn index_urls(starting_url: String, domains: Vec<String>) -> Result<(), WebScrapingError> {
+pub async fn index_urls(
+    starting_url: String,
+    domains: Vec<String>,
+) -> Result<HashMap<String, Url>, WebScrapingError> {
     let first_url = Url::new(starting_url.clone(), None, starting_url.clone());
 
-    let mut url_hash_set: HashSet<String> = HashSet::from([starting_url.clone()]);
-    
-    let mut url_index: HashMap<String, Url> = HashMap::from([
-            (starting_url, first_url),
-            ]);
+    let url_hash_set: HashSet<String> = HashSet::from([starting_url.clone()]);
+
+    let url_index: HashMap<String, Url> = HashMap::from([(starting_url, first_url)]);
 
     // Open web connection with webdriver (fantoccinni crate)
     println!("Opening Up Web Client");
     let mut web_client: Client = open_new_client().await?;
     println!("Connected to Web Client");
-    
-    let final_index: HashMap<String, Url> = create_index(url_index, url_hash_set, domains, &mut web_client).await?;
-    
-    // TODO: 
+
+    let final_index: HashMap<String, Url> =
+        create_index(url_index, url_hash_set, domains, &mut web_client).await?;
+
+    // TODO:
     //Print url_index to file
 
     if let Ok(web_client_windows) = web_client.windows().await {
@@ -102,47 +101,51 @@ pub async fn index_urls(starting_url: String, domains: Vec<String>) -> Result<()
     }
 
     web_client.close().await?;
-    Ok(())
+    Ok(final_index)
 }
 
 use async_recursion::async_recursion;
 
 #[async_recursion]
-async fn create_index(mut url_index: HashMap<String, Url>,mut url_list: HashSet<String>, domains: Vec<String>, web_client: &mut Client) -> Result<HashMap<String, Url>, WebScrapingError> {
-    let mut found_urls: HashSet<String> = url_list.clone(); 
+async fn create_index(
+    mut url_index: HashMap<String, Url>,
+    mut url_list: HashSet<String>,
+    domains: Vec<String>,
+    web_client: &mut Client,
+) -> Result<HashMap<String, Url>, WebScrapingError> {
+    let found_urls: HashSet<String> = url_list.clone();
     let mut should_return = true;
 
-    let mut url_list_iter = found_urls.into_iter(); 
+    let mut url_list_iter = found_urls.into_iter();
     println!("Looping through {:?} urls ", url_list_iter.size_hint());
     while let Some(url) = url_list_iter.next() {
-        //All urls we iterator through should be found in the index 
-        if let Some(url_object) = url_index.get(&url){ 
+        //All urls we iterator through should be found in the index
+        if let Some(url_object) = url_index.get(&url) {
             // println!("{:?}", url_object);
             //If Url contains Some response code we know we already visited this url
             if let Some(code) = url_object.response_code {
                 println!("Found response code: {}", code);
-                continue; 
+                continue;
             } else {
                 should_return = false;
             }
         }
 
-        let found_urls_vec: Vec<String> = find_all_urls_from_webpage(&url, web_client, domains.clone(), &mut url_index).await?;
-        //iterate through all urls and insert to HashSet. 
+        let found_urls_vec: Vec<String> =
+            find_all_urls_from_webpage(&url, web_client, domains.clone(), &mut url_index).await?;
+        //iterate through all urls and insert to HashSet.
         let mut found_urls_iter = found_urls_vec.into_iter();
         while let Some(found_url) = found_urls_iter.next() {
             url_list.insert(found_url);
-        } 
-        
+        }
     }
-    
+
     if should_return {
-        return Ok(url_index)
+        return Ok(url_index);
     } else {
-        return create_index(url_index, url_list, domains, web_client).await
+        return create_index(url_index, url_list, domains, web_client).await;
     }
 }
-
 
 async fn is_404(web_client: &mut Client) -> Result<bool, WebScrapingError> {
     let locator = Locator::XPath("//title");
@@ -152,11 +155,11 @@ async fn is_404(web_client: &mut Client) -> Result<bool, WebScrapingError> {
     let title_text = title.text().await?;
 
     if title_text.contains("Page Not Found") {
-        return Ok(true)
+        return Ok(true);
     } else {
-        return Ok(false)
+        return Ok(false);
     }
-} 
+}
 
 async fn open_new_client() -> Result<Client, WebScrapingError> {
     Ok(ClientBuilder::native()
@@ -195,12 +198,12 @@ fn format_urls(mut domain: String, mut urls: Vec<String>) -> Vec<String> {
     while domain.ends_with("/") {
         domain.pop();
     }
-    
+
     while let Some(url) = urls_iter.next() {
         // Remove # to the end ->
         if let Some(idx) = url.find("#") {
             let (url_replacement, _) = url.split_at(idx);
-            
+
             *url = url_replacement.to_string();
             println!("Url #2: {}", &url);
         }
@@ -211,7 +214,7 @@ fn format_urls(mut domain: String, mut urls: Vec<String>) -> Vec<String> {
             let http = String::from("http://");
             if !url.starts_with(&(https.clone() + &domain)) && !url.starts_with(&(http + &domain)) {
                 (*url).insert_str(0, &(https + &domain));
-            } 
+            }
         } else {
             if !url.starts_with(&domain) {
                 //add domain to url
@@ -219,30 +222,41 @@ fn format_urls(mut domain: String, mut urls: Vec<String>) -> Vec<String> {
                 println!("New Url: {}", &url);
             }
         }
-
     }
     urls
 }
 
-fn add_to_list(mut urls: Vec<String>, host: String, domain_list: Vec<String>, hash_map: &mut HashMap<String, Url>) -> Result<Vec<String>, WebScrapingError> {
-        urls = filter_domains(urls, domain_list);
+fn add_to_list(
+    mut urls: Vec<String>,
+    host: String,
+    domain_list: Vec<String>,
+    hash_map: &mut HashMap<String, Url>,
+    current_domain: String,
+) -> Result<Vec<String>, WebScrapingError> {
+    urls = filter_domains(urls, domain_list);
 
-        //TODO: refactor host.clone() to accept &String
-        urls = format_urls(host.clone(), urls);
+    //TODO: refactor host.clone() to accept &String
+    urls = format_urls(current_domain, urls);
 
-        let mut url_iter = urls.iter();
+    let mut url_iter = urls.iter();
 
-        //TODO: refactor host.clone() to accept &String
-        while let Some(url_string) = url_iter.next() {
+    //TODO: refactor host.clone() to accept &String
+    while let Some(url_string) = url_iter.next() {
+        if !hash_map.contains_key(&url_string.to_string()) {
             let url_object = Url::new(url_string.to_string(), None, host.clone());
-            if !hash_map.contains_key(&url_string.to_string()) {
-                hash_map.insert(url_string.to_string(), url_object);
+            hash_map.insert(url_string.to_string(), url_object);
+        } else {
+            if let Some(url_object) = hash_map.get_mut(&url_string.to_string()) {
+                (*url_object).add_reference(host.clone());
+            } else {
+                panic!("Could not find Url Key");
             }
         }
+    }
 
-        Ok(urls)
+    Ok(urls)
 }
-    /// Checks urls to make sure they are in the trusted domains
+/// Checks urls to make sure they are in the trusted domains
 
 fn filter_domains(urls: Vec<String>, domain_list: Vec<String>) -> Vec<String> {
     let domain_iter = domain_list.iter();
@@ -279,35 +293,39 @@ fn filter_domains(urls: Vec<String>, domain_list: Vec<String>) -> Vec<String> {
         .collect()
 }
 
-async fn find_all_urls_from_webpage(url_to_visit: &String, web_client: &mut Client, domain_list: Vec<String>, hash_map: &mut HashMap<String, Url> ) -> Result<Vec<String>, WebScrapingError> {
-    web_client.goto(url_to_visit).await?; 
+async fn find_all_urls_from_webpage(
+    url_to_visit: &String,
+    web_client: &mut Client,
+    domain_list: Vec<String>,
+    hash_map: &mut HashMap<String, Url>,
+) -> Result<Vec<String>, WebScrapingError> {
+    web_client.goto(url_to_visit).await?;
 
-    //set response code on url object: 
+    //set response code on url object:
     if let Some(url_object) = hash_map.get_mut(url_to_visit) {
-        println!("Url Object before change: {:?}", &url_object);
         (*url_object).set_response_code(web_client).await?;
-        println!("Url Object after change: {:?}", &url_object);
     } else {
-        println!("Hash Map: {:?}", hash_map);
-        println!("url to visit: {:}", url_to_visit);
         panic!("Could not find Url Key");
     }
 
-    let locator = Locator::XPath("//a");
-    
     let all_urls = find_urls(web_client).await?;
-    
+
     let current_url = web_client.current_url().await?;
-    if let Some(host) = current_url.domain() {
-        if let Ok(formatted_urls) = add_to_list(all_urls, host.to_string(), domain_list, hash_map) {
+    if let Some(current_domain) = current_url.domain() {
+        if let Ok(formatted_urls) = add_to_list(
+            all_urls,
+            current_url.as_str().to_string(),
+            domain_list,
+            hash_map,
+            current_domain.to_string(),
+        ) {
             Ok(formatted_urls)
         } else {
             Err(WebScrapingError::FormattingUrlError)
         }
     } else {
-        Err(WebScrapingError::FindingDomainError)
+        Err(WebScrapingError::FormattingUrlError)
     }
-    
 }
 
 // #[cfg(test)]
@@ -469,9 +487,9 @@ async fn find_all_urls_from_webpage(url_to_visit: &String, web_client: &mut Clie
 //     fn url_index_add_good_url_test_stays_on_all_urls() {
 //         let url_index = UrlIndex::new(HashSet::from(["https://f3d-shop.forgeflow.io/".to_string()]));
 //         url_index.add_to_list(vec!["https://f3d-shop.forgeflow.io/".to_string()], "https://f3d-shop.forgeflow.io/".to_string());
-        
+
 //         let all_url_iter_result = filter_out_tested_domains(&url_index);
-//         if let Ok(mut url_iter) = all_url_iter_result {        
+//         if let Ok(mut url_iter) = all_url_iter_result {
 //             if let Some(mut url) = url_iter.next() {
 //                 url.set_response_code(200);
 //                 url_index.add(url);
@@ -481,7 +499,7 @@ async fn find_all_urls_from_webpage(url_to_visit: &String, web_client: &mut Clie
 //         } else {
 //             assert!(false);
 //         }
-        
+
 //         let url_ghost = Url {
 //                     url: "https://f3d-shop.forgeflow.io/".to_string(),
 //                     response_code: Some(200),
@@ -814,7 +832,7 @@ async fn find_all_urls_from_webpage(url_to_visit: &String, web_client: &mut Clie
 
 //     #[test]
 //     fn filter_out_tested_domains_test() {
-       
+
 //         let mut hash_set = HashSet::new();
 //         hash_set.insert(Url::new(
 //             "https://example.com".to_string(),
@@ -841,7 +859,7 @@ async fn find_all_urls_from_webpage(url_to_visit: &String, web_client: &mut Clie
 //             Some(500),
 //             "https://example.com".to_string(),
 //         ));
-       
+
 //         let url_index = UrlIndex {
 //                 bad_urls: Arc::new(Mutex::new(Vec::new())),
 //                 good_urls: Arc::new(Mutex::new(Vec::new())),
@@ -860,10 +878,10 @@ async fn find_all_urls_from_webpage(url_to_visit: &String, web_client: &mut Clie
 //             assert!(false)
 //         }
 //     }
-    
+
 //     #[test]
 //     fn filter_out_tested_domains_test_final() {
-       
+
 //         let mut hash_set = HashSet::new();
 //         hash_set.insert(Url::new(
 //             "https://example.com/123".to_string(),
@@ -875,7 +893,7 @@ async fn find_all_urls_from_webpage(url_to_visit: &String, web_client: &mut Clie
 //             Some(500),
 //             "https://example.com".to_string(),
 //         ));
-       
+
 //         let url_index = UrlIndex {
 //                 bad_urls: Arc::new(Mutex::new(Vec::new())),
 //                 good_urls: Arc::new(Mutex::new(Vec::new())),
@@ -886,7 +904,7 @@ async fn find_all_urls_from_webpage(url_to_visit: &String, web_client: &mut Clie
 //             };
 
 //         if let Ok(mut result) = filter_out_tested_domains(&url_index) {
-//             // Should return an empty iterator. 
+//             // Should return an empty iterator.
 //             assert_eq!(result.next(), None)
 //         } else {
 //             assert!(false)
@@ -900,7 +918,7 @@ async fn find_all_urls_from_webpage(url_to_visit: &String, web_client: &mut Clie
 //             None,
 //             "https://google.com/".to_string(),
 //         );
-        
+
 //         url.set_response_code(404);
 
 //         assert_eq!(
@@ -974,5 +992,5 @@ async fn find_all_urls_from_webpage(url_to_visit: &String, web_client: &mut Clie
 //     //             all_urls: Arc::new(Mutex::new(hash_set)),
 //     //             domain_list: Arc::new(HashSet::from(["https://example.com".to_string()]))
 //     //         };
-//     // } 
+//     // }
 // }
