@@ -1,5 +1,5 @@
 mod webscraper;
-use webscraper::find_urls_copy::{index_urls, WebScrapingError};
+use webscraper::find_urls::{index_urls, WebScrapingError};
 
 #[tokio::main]
 async fn main() -> Result<(), WebScrapingError> {
