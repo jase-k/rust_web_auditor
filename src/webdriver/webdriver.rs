@@ -1,7 +1,5 @@
 use std::process::Child;
 use std::process::Command;
-use std::path::Path;
-use std::ffi::OsStr;
 use std::env;
 
 pub struct DriverHandle {
