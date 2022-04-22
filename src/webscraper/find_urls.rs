@@ -110,11 +110,11 @@ fn write_to_file(hash_map: HashMap<String, Url>) -> Result<(), WebScrapingError>
     if let Err(_) = fs::DirBuilder::new().recursive(true).create("./data") {
         println!("Trouble creating data directory!");
         return Err(WebScrapingError::WritingToFileError);
-    } 
+    }
     if let Ok(mut good_urls_file) = fs::File::options()
-    .write(true)
-    .create(true)
-    .open(Path::new("./data/all_urls.json"))
+        .write(true)
+        .create(true)
+        .open(Path::new("./data/all_urls.json"))
     {
         if let Ok(string) = serde_json::to_string(&hash_map) {
             if let Ok(_) = good_urls_file.write(string.as_bytes()) {
