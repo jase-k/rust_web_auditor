@@ -1,6 +1,7 @@
+mod webdriver;
 mod webscraper;
 use webscraper::find_urls::{index_urls, WebScrapingError};
-use std::process::Command;
+use webdriver::webdriver::{DriverHandle, WebDriver};
 
 #[tokio::main]
 async fn main() -> Result<(), WebScrapingError> {
@@ -9,11 +10,19 @@ async fn main() -> Result<(), WebScrapingError> {
     } else if cfg!(target_os = "linux") {
         println!("Running configuration for linux");
     }
+    //Launches WebDriver
+    let mut webdriver: DriverHandle = DriverHandle::new(WebDriver::GeckoDriver);
 
     index_urls(
-        "https://f3d-shop.forgeflow.io/".to_string(),
-        vec!["https://f3d-shop.forgeflow.io/".to_string()],
+        "https://example.com/".to_string(),
+        vec!["https://example.com/".to_string()],
     )
     .await?;
+
+    //Exits Gecko-Driver
+    if let Err(e) =  webdriver.kill() {
+        println!("Error closing Webdriver: {:?}", e);
+    }
+
     Ok(())
 }
