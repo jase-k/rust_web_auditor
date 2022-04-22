@@ -17,15 +17,32 @@ pub enum WebDriverError {
 impl DriverHandle {
     pub fn new(driver_type: WebDriver) -> Self {
         println!("Creating WebDriver");
-        match driver_type {
-            WebDriver::GeckoDriver => {
-                return DriverHandle {
-                    process: Command::new("./webdrivers/geckodriver.exe")
-                        .spawn()
-                        .expect("command failed to start"),
-                }
-            },
-            //Add more compatible Drivers later
+        if cfg!(target_os = "windows") {
+            println!("Running configuration for windows");
+            match driver_type {
+                WebDriver::GeckoDriver => {
+                    return DriverHandle {
+                        process: Command::new("./webdrivers/geckodriver.exe")
+                            .spawn()
+                            .expect("command failed to start"),
+                    }
+                },
+                //Add more compatible Drivers later
+            }
+        } else if cfg!(target_os = "linux") {
+            println!("Running configuration for linux");
+            match driver_type {
+                WebDriver::GeckoDriver => {
+                    return DriverHandle {
+                        process: Command::new("geckodriver")
+                            .spawn()
+                            .expect("command failed to start"),
+                    }
+                },
+                //Add more compatible Drivers later
+            }
+        } else {
+            panic!("Didn't recognize os system!");
         }
     }
 
