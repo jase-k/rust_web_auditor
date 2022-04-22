@@ -1,3 +1,4 @@
+use crate::webdriver::webdriver::{DriverHandle, WebDriver};
 use async_recursion::async_recursion;
 use fantoccini::elements::Element;
 use fantoccini::error::{CmdError, NewSessionError};
@@ -81,6 +82,9 @@ pub async fn index_urls(
     starting_url: String,
     domains: Vec<String>,
 ) -> Result<(), WebScrapingError> {
+    //Launches WebDriver
+    let mut webdriver: DriverHandle = DriverHandle::new(WebDriver::GeckoDriver);
+
     let first_url = Url::new(starting_url.clone(), None, starting_url.clone());
 
     let url_hash_set: HashSet<String> = HashSet::from([starting_url.clone()]);
@@ -101,6 +105,11 @@ pub async fn index_urls(
     println!("Closing to Web Client");
     web_client.close().await?;
     println!("Closed to Web Client");
+
+    //Exits Gecko-Driver
+    if let Err(e) = webdriver.kill() {
+        println!("Error closing Webdriver: {:?}", e);
+    }
 
     Ok(())
 }

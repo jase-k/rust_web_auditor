@@ -24,8 +24,7 @@ impl DriverHandle {
                         .spawn()
                         .expect("command failed to start"),
                 }
-            },
-            //Add more compatible Drivers later
+            } //Add more compatible Drivers later
         }
     }
 
@@ -34,7 +33,9 @@ impl DriverHandle {
         if let Ok(_) = self.process.kill() {
             Ok(())
         } else {
-            Err(WebDriverError::UnableToCloseProgram(String::from("Driver wasn't running!")))
+            Err(WebDriverError::UnableToCloseProgram(String::from(
+                "Driver wasn't running!",
+            )))
         }
     }
 }
