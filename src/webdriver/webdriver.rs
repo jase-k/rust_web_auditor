@@ -21,14 +21,8 @@ impl DriverHandle {
         if cfg!(target_os = "windows") {
             match driver_type {
                 WebDriver::GeckoDriver => {
-                    let mut path = env::current_exe().expect("Could not locate directory");
-                    path.pop();
-                    path.pop();
-                    path.pop();
-                    path.push("webdrivers");
-                    path.push("geckodriver.exe");
                     return DriverHandle {
-                        process: Command::new(path)
+                        process: Command::new("geckodriver")
                             .spawn()
                             .expect("command failed to start"),
                     }
