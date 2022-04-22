@@ -1,6 +1,6 @@
 [package]
 name = "web_audit"
-version = "0.0.0"
+version = "0.0.1"
 authors = ["jase-k <jasekraft12@gmail.com>"]
 license = "MIT"
 description = "A simple to use tool to get detailed data about your website"
