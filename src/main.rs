@@ -10,10 +10,10 @@ async fn main() -> Result<(), WebScrapingError> {
         println!("Running configuration for linux");
     }
 
-    // index_urls(
-    //     "https://f3d-shop.forgeflow.io/".to_string(),
-    //     vec!["https://f3d-shop.forgeflow.io/".to_string()],
-    // )
-    // .await?;
+    index_urls(
+        "https://f3d-shop.forgeflow.io/".to_string(),
+        vec!["https://f3d-shop.forgeflow.io/".to_string()],
+    )
+    .await?;
     Ok(())
 }
