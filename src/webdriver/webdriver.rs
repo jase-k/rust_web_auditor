@@ -1,5 +1,8 @@
 use std::process::Child;
 use std::process::Command;
+use std::path::Path;
+use std::ffi::OsStr;
+use std::env;
 
 pub struct DriverHandle {
     process: Child,
@@ -18,16 +21,21 @@ impl DriverHandle {
     pub fn new(driver_type: WebDriver) -> Self {
         println!("Creating WebDriver");
         if cfg!(target_os = "windows") {
-            println!("Running configuration for windows");
             match driver_type {
                 WebDriver::GeckoDriver => {
+                    let mut path = env::current_exe().expect("Could not locate directory");
+                    path.pop();
+                    path.pop();
+                    path.pop();
+                    path.push("webdrivers");
+                    path.push("geckodriver.exe");
                     return DriverHandle {
-                        process: Command::new("./webdrivers/geckodriver.exe")
+                        process: Command::new(path)
                             .spawn()
                             .expect("command failed to start"),
                     }
                 },
-                //Add more compatible Drivers later
+                //TODO: add more compatible Drivers
             }
         } else if cfg!(target_os = "linux") {
             println!("Running configuration for linux");

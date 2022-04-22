@@ -98,8 +98,6 @@ pub async fn index_urls(
     let final_index: HashMap<String, Url> =
         create_index(url_index, url_hash_set, domains, &mut web_client).await?;
 
-    // TODO:
-    //Print url_index to file
     write_to_file(final_index)?;
 
     println!("Closing to Web Client");
