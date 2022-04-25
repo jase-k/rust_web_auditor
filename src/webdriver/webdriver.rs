@@ -1,6 +1,5 @@
 use std::process::Child;
 use std::process::Command;
-use std::env;
 
 pub struct DriverHandle {
     process: Child,

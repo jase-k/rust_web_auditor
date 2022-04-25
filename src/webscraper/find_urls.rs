@@ -59,10 +59,10 @@ impl Url {
         self
     }
 
-    async fn set_response_code(&mut self, web_client: &mut Client) -> Result<(), WebScrapingError> {
+    async fn set_response_code(&mut self, web_client: &mut Client, not_found_title: &String) -> Result<(), WebScrapingError> {
         let current_url = web_client.current_url().await?;
 
-        if is_404(web_client).await? {
+        if is_404(web_client, not_found_title).await? {
             self.response_code = Some(404);
             println!("Response 404 from: {}", self.full_path);
         } else if self.full_path == current_url.as_str() {
@@ -81,6 +81,7 @@ impl Url {
 pub async fn index_urls(
     starting_url: String,
     domains: Vec<String>,
+    not_found_title: String
 ) -> Result<(), WebScrapingError> {
     //Launches WebDriver
     let mut webdriver: DriverHandle = DriverHandle::new(WebDriver::GeckoDriver);
@@ -96,7 +97,7 @@ pub async fn index_urls(
     println!("Connected to Web Client");
 
     let final_index: HashMap<String, Url> =
-        create_index(url_index, url_hash_set, domains, &mut web_client).await?;
+        create_index(url_index, url_hash_set, domains, &mut web_client, &not_found_title).await?;
 
     write_to_file(final_index)?;
 
@@ -146,6 +147,7 @@ async fn create_index(
     mut url_list: HashSet<String>,
     domains: Vec<String>,
     web_client: &mut Client,
+    not_found_title: &String
 ) -> Result<HashMap<String, Url>, WebScrapingError> {
     let found_urls: HashSet<String> = url_list.clone();
     let mut should_return = true;
@@ -165,7 +167,7 @@ async fn create_index(
         }
 
         let found_urls_vec: Vec<String> =
-            find_all_urls_from_webpage(&url, web_client, domains.clone(), &mut url_index).await?;
+            find_all_urls_from_webpage(&url, web_client, domains.clone(), &mut url_index, &not_found_title).await?;
         //iterate through all urls and insert to HashSet.
         let mut found_urls_iter = found_urls_vec.into_iter();
         while let Some(found_url) = found_urls_iter.next() {
@@ -176,18 +178,18 @@ async fn create_index(
     if should_return {
         return Ok(url_index);
     } else {
-        return create_index(url_index, url_list, domains, web_client).await;
+        return create_index(url_index, url_list, domains, web_client, &not_found_title).await;
     }
 }
 
-async fn is_404(web_client: &mut Client) -> Result<bool, WebScrapingError> {
+async fn is_404(web_client: &mut Client, not_found_title: &String) -> Result<bool, WebScrapingError> {
     let locator = Locator::XPath("//title");
 
-    let mut title = web_client.find(locator).await?; //Vec<Elements>
+    let mut title = web_client.find(locator).await?; //Element
 
-    let title_text = title.text().await?;
+    let title_text = title.html(true).await?;
 
-    if title_text.contains("Page Not Found") {
+    if title_text.to_lowercase().contains(&not_found_title.to_lowercase()) {
         return Ok(true);
     } else {
         return Ok(false);
@@ -329,12 +331,13 @@ async fn find_all_urls_from_webpage(
     web_client: &mut Client,
     domain_list: Vec<String>,
     hash_map: &mut HashMap<String, Url>,
+    not_found_title: &String
 ) -> Result<Vec<String>, WebScrapingError> {
     web_client.goto(url_to_visit).await?;
 
     //set response code on url object:
     if let Some(url_object) = hash_map.get_mut(url_to_visit) {
-        (*url_object).set_response_code(web_client).await?;
+        (*url_object).set_response_code(web_client, not_found_title).await?;
     } else {
         panic!("Could not find Url Key");
     }

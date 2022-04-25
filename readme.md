@@ -1,5 +1,11 @@
 # WORK IN PROGRESS
 
+Next milestone:
+List out all external links to check for bad links / redirects
+
+Upcoming Milestones:
+Use lighthouse to run an audit on every url in domain file.
+
 # Purpose:
 
 The purpose of this tool is to allow web developers to get a high level overview of website performance, and track 404 links. More functionality to come. . .
@@ -23,7 +29,7 @@ Install Rust: https://www.rust-lang.org/tools/install
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
 
-Install Openssl:
+**Install Openssl:**
 
 ```
 sudo apt update
