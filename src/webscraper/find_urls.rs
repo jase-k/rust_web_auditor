@@ -15,6 +15,7 @@ pub enum WebScrapingError {
     FantocciniCmdErrorr(CmdError),
     FormattingUrlError,
     WritingToFileError,
+    ProblemIndexingExternals
 }
 
 impl From<CmdError> for WebScrapingError {
@@ -58,7 +59,7 @@ impl Url {
         self.redirected_to = Some(destination);
         self
     }
-
+    //TODO combine these two functions into one by checking response codes after indexing urls
     async fn set_response_code(&mut self, web_client: &mut Client, not_found_title: &String) -> Result<(), WebScrapingError> {
         let current_url = web_client.current_url().await?;
 
@@ -74,6 +75,11 @@ impl Url {
             println!("Response 300 from: {}", self.full_path);
         };
         Ok(())
+    }
+
+    fn set_response_code_(&mut self, code: u16) -> &Self {
+        self.response_code = Some(code);
+        self 
     }
 }
 
@@ -92,14 +98,20 @@ pub async fn index_urls(
 
     let url_index: HashMap<String, Url> = HashMap::from([(starting_url, first_url)]);
 
+    let external_urls: HashMap<String, Url> = HashMap::new();
+
     println!("Opening Up Web Client");
     let mut web_client: Client = open_new_client().await?;
     println!("Connected to Web Client");
 
-    let final_index: HashMap<String, Url> =
-        create_index(url_index, url_hash_set, domains, &mut web_client, &not_found_title).await?;
+    let (internal_index, mut external_index) =
+        create_index(url_index, url_hash_set, domains, &mut web_client, &not_found_title, external_urls).await?;
 
-    write_to_file(final_index)?;
+    // Check for external 404s //
+    check_external_urls(&mut external_index).await?;
+
+    write_to_file(internal_index, "./data/internal_urls.json")?;
+    write_to_file(external_index, "./data/external_urls.json")?;
 
     println!("Closing to Web Client");
     web_client.close().await?;
@@ -113,8 +125,33 @@ pub async fn index_urls(
     Ok(())
 }
 
+async fn check_external_urls(url_list: &mut HashMap<String, Url>) -> Result<(), WebScrapingError> {
+    let mut url_list_iter = url_list.iter_mut();
+    let mut error_count = 0; 
+
+    while let Some((_, url)) = url_list_iter.next() {
+        let response_result = reqwest::get(url.full_path.as_str()).await;
+        
+        if let Ok(response) = response_result {
+            let code = response.status().as_u16();
+            if code > 299 && code < 400 {
+                url.set_redirection(response.url().to_string().clone());
+            }
+            url.set_response_code_(code);
+
+        } else {
+            error_count += 1;
+        }
+        
+        if error_count > 10 {
+            return Err(WebScrapingError::ProblemIndexingExternals)
+        }
+    }
+    Ok(())
+}
+
 /// Print to file data/all_urls.json
-fn write_to_file(hash_map: HashMap<String, Url>) -> Result<(), WebScrapingError> {
+fn write_to_file(internal_urls: HashMap<String, Url>, file_path: &str) -> Result<(), WebScrapingError> {
     if let Err(_) = fs::DirBuilder::new().recursive(true).create("./data") {
         println!("Trouble creating data directory!");
         return Err(WebScrapingError::WritingToFileError);
@@ -122,9 +159,9 @@ fn write_to_file(hash_map: HashMap<String, Url>) -> Result<(), WebScrapingError>
     if let Ok(mut good_urls_file) = fs::File::options()
         .write(true)
         .create(true)
-        .open(Path::new("./data/all_urls.json"))
+        .open(Path::new(file_path))
     {
-        if let Ok(string) = serde_json::to_string(&hash_map) {
+        if let Ok(string) = serde_json::to_string(&internal_urls) {
             if let Ok(_) = good_urls_file.write(string.as_bytes()) {
                 Ok(())
             } else {
@@ -147,8 +184,9 @@ async fn create_index(
     mut url_list: HashSet<String>,
     domains: Vec<String>,
     web_client: &mut Client,
-    not_found_title: &String
-) -> Result<HashMap<String, Url>, WebScrapingError> {
+    not_found_title: &String,
+    mut external_urls: HashMap<String, Url>
+) -> Result<(HashMap<String, Url> /* Internal urls*/, HashMap<String, Url> /* external urls*/), WebScrapingError> {
     let found_urls: HashSet<String> = url_list.clone();
     let mut should_return = true;
 
@@ -167,7 +205,7 @@ async fn create_index(
         }
 
         let found_urls_vec: Vec<String> =
-            find_all_urls_from_webpage(&url, web_client, domains.clone(), &mut url_index, &not_found_title).await?;
+            find_all_urls_from_webpage(&url, web_client, domains.clone(), &mut url_index, &mut external_urls, &not_found_title).await?;
         //iterate through all urls and insert to HashSet.
         let mut found_urls_iter = found_urls_vec.into_iter();
         while let Some(found_url) = found_urls_iter.next() {
@@ -176,9 +214,9 @@ async fn create_index(
     }
 
     if should_return {
-        return Ok(url_index);
+        return Ok((url_index, external_urls));
     } else {
-        return create_index(url_index, url_list, domains, web_client, &not_found_title).await;
+        return create_index(url_index, url_list, domains, web_client, &not_found_title, external_urls).await;
     }
 }
 
@@ -262,24 +300,25 @@ fn format_urls(mut domain: String, mut urls: Vec<String>) -> Vec<String> {
 }
 
 fn add_to_list(
-    mut urls: Vec<String>,
+    urls: Vec<String>,
     host: String,
     domain_list: Vec<String>,
-    hash_map: &mut HashMap<String, Url>,
+    url_index: &mut HashMap<String, Url>,
+    external_url_index: &mut HashMap<String, Url>,
     current_domain: String,
 ) -> Result<Vec<String>, WebScrapingError> {
-    urls = filter_domains(urls, domain_list);
+    let (mut internal_urls, external_urls) = filter_domains(urls, domain_list);
 
-    urls = format_urls(current_domain, urls);
+    internal_urls = format_urls(current_domain, internal_urls);
 
-    let mut url_iter = urls.iter();
+    let mut internal_url_iter = internal_urls.iter();
 
-    while let Some(url_string) = url_iter.next() {
-        if !hash_map.contains_key(&url_string.to_string()) {
+    while let Some(url_string) = internal_url_iter.next() {
+        if !url_index.contains_key(&url_string.to_string()) {
             let url_object = Url::new(url_string.to_string(), None, host.clone());
-            hash_map.insert(url_string.to_string(), url_object);
+            url_index.insert(url_string.to_string(), url_object);
         } else {
-            if let Some(url_object) = hash_map.get_mut(&url_string.to_string()) {
+            if let Some(url_object) = url_index.get_mut(&url_string.to_string()) {
                 (*url_object).add_reference(host.clone());
             } else {
                 panic!("Could not find Url Key");
@@ -287,56 +326,93 @@ fn add_to_list(
         }
     }
 
-    Ok(urls)
+    if let Err(_) = index_external_urls(external_urls, external_url_index, host) {
+        println!("Warning: Problem Indexing External Urls");
+    }
+
+    
+    Ok(internal_urls)
+}
+
+fn index_external_urls(external_urls: Vec<String>, external_url_index: &mut HashMap<String, Url>, current_url: String) -> Result<(), WebScrapingError> {
+    let mut urls_iter = external_urls.iter();
+    
+    while let Some(url_string) = urls_iter.next() {
+        if !external_url_index.contains_key(&url_string.to_string()) {
+            let url_object = Url::new(url_string.to_string(), None, current_url.clone());
+            external_url_index.insert(url_string.to_string(), url_object);
+        } else {
+            if let Some(url_object) = external_url_index.get_mut(&url_string.to_string()) {
+                (*url_object).add_reference(current_url.clone());
+            } else {
+                panic!("Could not find Url Key");
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Checks urls to make sure they are in the trusted domains
-fn filter_domains(urls: Vec<String>, domain_list: Vec<String>) -> Vec<String> {
-    let domain_iter = domain_list.iter();
-    urls.into_iter()
-        .filter(|url| {
-            let mut should_keep = false;
+fn filter_domains(urls: Vec<String>, domain_list: Vec<String>) -> (Vec<String>, Vec<String>) { //internal urls, external urls// 
+    let mut url_iter = urls.iter();
+    let mut external_urls: Vec<String> = Vec::new();
+    let mut internal_urls: Vec<String> = Vec::new();
 
-            for domain in domain_iter.clone() {
-                if domain.starts_with("http") {
-                    if url.starts_with(domain) {
-                        should_keep = true;
-                        break;
-                    } else {
-                        continue;
-                    }
-                }
+    while let Some(url) = url_iter.next() {
+        if is_internal(url.to_string(), &domain_list) {
+            internal_urls.push(url.to_string());
+        } else {
+            external_urls.push(url.to_string());
+        }
+    }
+    (internal_urls, external_urls)
+}
 
-                //Adds https && http if not included
-                let https = String::from("https://");
-                let http = String::from("http://");
-                if url.starts_with(&(https + domain)) {
-                    should_keep = true;
-                    break;
-                } else if url.starts_with(&(http + domain)) {
-                    should_keep = true;
-                    break;
-                } else if url.starts_with("/") {
-                    should_keep = true;
-                    break;
-                }
+fn is_internal(url: String, domains: &Vec<String>) -> bool {
+    let domain_iter = domains.iter();
+
+    let mut is_internal = false;
+
+    for domain in domain_iter {
+        if domain.starts_with("http") {
+            if url.starts_with(domain) {
+                is_internal = true;
+                break;
+            } else {
+                continue;
             }
-            should_keep
-        })
-        .collect()
+        }
+
+        //Adds https && http if not included
+        let https = String::from("https://");
+        let http = String::from("http://");
+        if url.starts_with(&(https + domain)) {
+            is_internal = true;
+            break;
+        } else if url.starts_with(&(http + domain)) {
+            is_internal = true;
+            break;
+        } else if url.starts_with("/") {
+            is_internal = true;
+            break;
+        }
+    }
+
+    is_internal
 }
 
 async fn find_all_urls_from_webpage(
     url_to_visit: &String,
     web_client: &mut Client,
     domain_list: Vec<String>,
-    hash_map: &mut HashMap<String, Url>,
+    url_index: &mut HashMap<String, Url>,
+    external_urls: &mut HashMap<String, Url>,
     not_found_title: &String
 ) -> Result<Vec<String>, WebScrapingError> {
     web_client.goto(url_to_visit).await?;
 
     //set response code on url object:
-    if let Some(url_object) = hash_map.get_mut(url_to_visit) {
+    if let Some(url_object) = url_index.get_mut(url_to_visit) {
         (*url_object).set_response_code(web_client, not_found_title).await?;
     } else {
         panic!("Could not find Url Key");
@@ -350,7 +426,8 @@ async fn find_all_urls_from_webpage(
             all_urls,
             current_url.as_str().to_string(),
             domain_list,
-            hash_map,
+            url_index,
+            external_urls,
             current_domain.to_string(),
         ) {
             Ok(formatted_urls)
