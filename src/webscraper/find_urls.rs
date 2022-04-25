@@ -108,7 +108,12 @@ pub async fn index_urls(
         create_index(url_index, url_hash_set, domains, &mut web_client, &not_found_title, external_urls).await?;
 
     // Check for external 404s //
-    check_external_urls(&mut external_index).await?;
+    println!("Checking External Link Statuses: ");
+
+    if let Err(e) = check_external_urls(&mut external_index).await {
+        println!("Warning: {:?}", e);
+    }
+
 
     write_to_file(internal_index, "./data/internal_urls.json")?;
     write_to_file(external_index, "./data/external_urls.json")?;
@@ -130,6 +135,11 @@ async fn check_external_urls(url_list: &mut HashMap<String, Url>) -> Result<(), 
     let mut error_count = 0; 
 
     while let Some((_, url)) = url_list_iter.next() {
+        if let (_, Some(num_left)) = url_list_iter.size_hint() {
+            if num_left % 10 == 0 {
+                println!("{} external urls left to check.", num_left);
+            }
+        }
         let response_result = reqwest::get(url.full_path.as_str()).await;
         
         if let Ok(response) = response_result {
@@ -278,7 +288,6 @@ fn format_urls(mut domain: String, mut urls: Vec<String>) -> Vec<String> {
             let (url_replacement, _) = url.split_at(idx);
 
             *url = url_replacement.to_string();
-            println!("Url #2: {}", &url);
         }
 
         if !domain.starts_with("http") {
@@ -392,7 +401,7 @@ fn is_internal(url: String, domains: &Vec<String>) -> bool {
         } else if url.starts_with(&(http + domain)) {
             is_internal = true;
             break;
-        } else if url.starts_with("/") {
+        } else if url.starts_with("/") || url.starts_with("?") {
             is_internal = true;
             break;
         }
