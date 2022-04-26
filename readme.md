@@ -1,10 +1,11 @@
 # WORK IN PROGRESS
 
 Next milestone:
-List out all external links to check for bad links / redirects
+[] - List out all external links to check for bad links / redirects
 
 Upcoming Milestones:
 Use lighthouse to run an audit on every url in domain file.
+Kill geckodriver before closing on error
 
 # Purpose:
 
