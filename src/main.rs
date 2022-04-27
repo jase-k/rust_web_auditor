@@ -1,6 +1,8 @@
 mod webdriver;
 mod webscraper;
 use clap::{crate_authors, crate_description, Arg, Command};
+use std::fs;
+use std::path::Path;
 use webscraper::find_urls::{index_urls, WebScrapingError};
 
 #[tokio::main]
@@ -10,13 +12,13 @@ async fn main() -> Result<(), WebScrapingError> {
     } else if cfg!(target_os = "linux") {
         println!("Running configuration for linux");
     }
-
     let matches = Command::new("Web-audit")
-        .author(crate_authors!("\n"))
-        .version("0.0.0")
-        .about(crate_description!())
-        .subcommand(
-            Command::new("index-urls")
+    .author(crate_authors!("\n"))
+    .version("0.0.0")
+    .about(crate_description!())
+    .subcommand(
+        //TODO : Allow domain list from file
+        Command::new("index-urls")
                 .arg(
                     Arg::new("starting-url")
                         .long("url")
@@ -53,9 +55,17 @@ async fn main() -> Result<(), WebScrapingError> {
             panic!("url must be provided");
         }
 
-        if let Some(domains_) = sub_matches.value_of("domain-list") {
+        if let Some(domains_path) = sub_matches.value_of("domain-list") {
             //TODO: convert file path to vec. 
-            domains = vec![domains_.to_string()];
+            let file_content = fs::read_to_string(Path::new(domains_path));
+            if let Ok(domain_string) = file_content {
+                let domains_ : Vec<String> = domain_string.split(",").map(|x| {
+                    x.to_string()
+                }).collect();
+                domains = domains_
+            } else {
+                panic!("Could not read domain file path!");
+            }
         } else {
             domains = vec![(&url).clone().to_string()]
         }

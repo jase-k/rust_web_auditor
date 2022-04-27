@@ -138,8 +138,6 @@ pub async fn index_urls(
     Ok(())
 }
 
-//TODO: Let this run asynchronously and have a time out response if takes too long to respond. 
-// Future's job: return a tuple (key, Url)
 async fn get_url_information(request_client: ReqwestClient, url: &mut Url) -> Result<(String, Url), WebScrapingError> {
     println!("Checking: {}", &url.full_path);
     //Set a limit for this send
@@ -316,7 +314,7 @@ async fn get_href(mut element: Element) -> Result<Option<String>, WebScrapingErr
 fn format_urls(mut domain: String, mut urls: Vec<String>) -> Vec<String> {
     let mut urls_iter = urls.iter_mut();
 
-    //remove '/' from end of domain if needed:
+    // remove '/' from end of domain if needed:
     while domain.ends_with("/") {
         domain.pop();
     }
@@ -330,15 +328,26 @@ fn format_urls(mut domain: String, mut urls: Vec<String>) -> Vec<String> {
         }
         *url = url.as_str().trim().to_string();
 
+        if url.starts_with("http") {
+            continue;
+        }
+
         if !domain.starts_with("http") {
             //Adds https && http if not included
             let https = String::from("https://");
             let http = String::from("http://");
             if !url.starts_with(&(https.clone() + &domain)) && !url.starts_with(&(http + &domain)) {
+                if !url.starts_with("/") && !url.starts_with("?") && !url.starts_with("#") && url.len() > 0 {
+                    (*url).insert(0, '/');
+                };
                 (*url).insert_str(0, &(https + &domain));
             }
         } else {
             if !url.starts_with(&domain) {
+                if !url.starts_with("/") && !url.starts_with("?") && !url.starts_with("#") && url.len() > 0 {
+                    (*url).insert(0, '/');
+                };
+                
                 //add domain to url
                 (*url).insert_str(0, &domain);
             }
@@ -532,7 +541,7 @@ mod tests {
             " https://lulzbot.com/3d-printers/".to_string(),
         ];
 
-        let domain = "https://lulzbot.com/".to_string();
+        let domain = "https://lulzbot.com".to_string();
 
         assert_eq!(
             format_urls(domain, urls),
@@ -554,7 +563,7 @@ mod tests {
             "https://lulzbot.com/3d-printers/".to_string(),
         ];
 
-        let domain = "lulzbot.com/".to_string();
+        let domain = "lulzbot.com".to_string();
 
         assert_eq!(
             format_urls(domain, urls),
@@ -573,16 +582,18 @@ mod tests {
             "#pop-up".to_string(),
             "about-me".to_string(),
             "?search=3d+printers".to_string(),
-        ];
-
+            "https://learn.lulzbot.com/support/cura".to_string(),
+            ];
+            
         let domain = "lulzbot.com/".to_string();
-
+        
         assert_eq!(
             format_urls(domain, urls),
             vec![
                 "https://lulzbot.com".to_string(),
-                "https://lulzbot.comabout-me".to_string(),
+                "https://lulzbot.com/about-me".to_string(),
                 "https://lulzbot.com?search=3d+printers".to_string(),
+                "https://learn.lulzbot.com/support/cura".to_string(),
             ]
         );
     }
