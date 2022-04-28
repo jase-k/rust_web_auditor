@@ -2,3 +2,4 @@ target/
 data/
 Cargo.lock
 .env
+domains.csv

@@ -3,13 +3,13 @@ use async_recursion::async_recursion;
 use fantoccini::elements::Element;
 use fantoccini::error::{CmdError, NewSessionError};
 use fantoccini::{Client, ClientBuilder, Locator};
+use futures::future::join_all;
+use reqwest::{Client as ReqwestClient, ClientBuilder as ReqwestClientBuilder};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
-use reqwest::{ClientBuilder as ReqwestClientBuilder, Client as ReqwestClient};
-use futures::future::join_all;
 use std::time::Duration;
 
 #[derive(Debug)]
@@ -19,7 +19,7 @@ pub enum WebScrapingError {
     FormattingUrlError,
     WritingToFileError,
     ProblemIndexingExternals,
-    ResponseCode500
+    ResponseCode500,
 }
 
 impl From<CmdError> for WebScrapingError {
@@ -64,7 +64,11 @@ impl Url {
         self
     }
     //TODO combine these two functions into one by checking response codes after indexing urls
-    async fn set_response_code(&mut self, web_client: &mut Client, not_found_title: &String) -> Result<(), WebScrapingError> {
+    async fn set_response_code(
+        &mut self,
+        web_client: &mut Client,
+        not_found_title: &String,
+    ) -> Result<(), WebScrapingError> {
         let current_url = web_client.current_url().await?;
 
         if is_404(web_client, not_found_title).await? {
@@ -83,7 +87,7 @@ impl Url {
 
     fn set_response_code_(&mut self, code: u16) -> &Self {
         self.response_code = Some(code);
-        self 
+        self
     }
 }
 
@@ -91,7 +95,7 @@ impl Url {
 pub async fn index_urls(
     starting_url: String,
     domains: Vec<String>,
-    not_found_title: String
+    not_found_title: String,
 ) -> Result<(), WebScrapingError> {
     //Launches WebDriver
     let mut webdriver: DriverHandle = DriverHandle::new(WebDriver::GeckoDriver);
@@ -108,9 +112,16 @@ pub async fn index_urls(
     let mut web_client: Client = open_new_client().await?;
     println!("Connected to Web Client");
 
-    let (internal_index, mut external_index) =
-        create_index(url_index, url_hash_set, domains, &mut web_client, &not_found_title, external_urls).await?;
-    
+    let (internal_index, mut external_index) = create_index(
+        url_index,
+        url_hash_set,
+        domains,
+        &mut web_client,
+        &not_found_title,
+        external_urls,
+    )
+    .await?;
+
     println!("Closing to Web Client");
     web_client.close().await?;
     println!("Closed to Web Client");
@@ -130,19 +141,19 @@ pub async fn index_urls(
         write_to_file(external_index, "./data/external_urls.json")?;
     }
 
-
     write_to_file(internal_index, "./data/internal_urls.json")?;
-
-
 
     Ok(())
 }
 
-async fn get_url_information(request_client: ReqwestClient, url: &mut Url) -> Result<(String, Url), WebScrapingError> {
+async fn get_url_information(
+    request_client: ReqwestClient,
+    url: &mut Url,
+) -> Result<(String, Url), WebScrapingError> {
     println!("Checking: {}", &url.full_path);
     //Set a limit for this send
     let response_result = request_client.get(url.full_path.clone()).send().await;
-    
+
     println!("Recieved Response from: {}", &url.full_path);
 
     if let Ok(res) = response_result {
@@ -154,39 +165,41 @@ async fn get_url_information(request_client: ReqwestClient, url: &mut Url) -> Re
 
         new_url.set_response_code_(response_code);
 
-
-        return Ok((url.full_path.clone(), new_url))
+        return Ok((url.full_path.clone(), new_url));
     } else {
         Err(WebScrapingError::ProblemIndexingExternals)
     }
 }
 
-async fn check_external_urls(url_list: &mut HashMap<String, Url>) -> Result<HashMap<String, Url>, WebScrapingError> {
+async fn check_external_urls(
+    url_list: &mut HashMap<String, Url>,
+) -> Result<HashMap<String, Url>, WebScrapingError> {
     let mut url_list_iter = url_list.into_iter();
     println!("Found {:?} of external Urls", url_list_iter.size_hint());
 
-    let web_client_result = ReqwestClientBuilder::new().timeout(Duration::from_secs(30)).build();
+    let web_client_result = ReqwestClientBuilder::new()
+        .timeout(Duration::from_secs(30))
+        .build();
     if let Ok(web_client) = web_client_result {
-        
         let mut futures = vec![];
-    
-        //creates a vector of futures to join and run below: 
+
+        //creates a vector of futures to join and run below:
         while let Some((_, url)) = url_list_iter.next() {
             futures.push(get_url_information(web_client.clone(), url))
         }
-    
+
         let future_results = join_all(futures).await;
         let mut future_results_iter = future_results.into_iter();
-    
+
         let mut new_hashmap = HashMap::new();
-        
+
         println!("Building JSON");
         while let Some(result) = future_results_iter.next() {
             if let Ok((key, value)) = result {
                 new_hashmap.insert(key, value);
             }
         }
-    
+
         Ok(new_hashmap)
     } else {
         Err(WebScrapingError::ProblemIndexingExternals)
@@ -194,7 +207,10 @@ async fn check_external_urls(url_list: &mut HashMap<String, Url>) -> Result<Hash
 }
 
 /// Print to file data/all_urls.json
-fn write_to_file(internal_urls: HashMap<String, Url>, file_path: &str) -> Result<(), WebScrapingError> {
+fn write_to_file(
+    internal_urls: HashMap<String, Url>,
+    file_path: &str,
+) -> Result<(), WebScrapingError> {
     if let Err(_) = fs::DirBuilder::new().recursive(true).create("./data") {
         println!("Trouble creating data directory!");
         return Err(WebScrapingError::WritingToFileError);
@@ -228,8 +244,14 @@ async fn create_index(
     domains: Vec<String>,
     web_client: &mut Client,
     not_found_title: &String,
-    mut external_urls: HashMap<String, Url>
-) -> Result<(HashMap<String, Url> /* Internal urls*/, HashMap<String, Url> /* external urls*/), WebScrapingError> {
+    mut external_urls: HashMap<String, Url>,
+) -> Result<
+    (
+        HashMap<String, Url>, /* Internal urls*/
+        HashMap<String, Url>, /* external urls*/
+    ),
+    WebScrapingError,
+> {
     let found_urls: HashSet<String> = url_list.clone();
     let mut should_return = true;
 
@@ -247,10 +269,17 @@ async fn create_index(
             }
         }
 
-        let found_urls_vec_result =
-            find_all_urls_from_webpage(&url, web_client, domains.clone(), &mut url_index, &mut external_urls, &not_found_title).await;
+        let found_urls_vec_result = find_all_urls_from_webpage(
+            &url,
+            web_client,
+            domains.clone(),
+            &mut url_index,
+            &mut external_urls,
+            &not_found_title,
+        )
+        .await;
         //iterate through all urls and insert to HashSet.
-        if let Ok(found_urls_vec) = found_urls_vec_result{
+        if let Ok(found_urls_vec) = found_urls_vec_result {
             let mut found_urls_iter = found_urls_vec.into_iter();
             while let Some(found_url) = found_urls_iter.next() {
                 url_list.insert(found_url);
@@ -263,18 +292,32 @@ async fn create_index(
     if should_return {
         return Ok((url_index, external_urls));
     } else {
-        return create_index(url_index, url_list, domains, web_client, &not_found_title, external_urls).await;
+        return create_index(
+            url_index,
+            url_list,
+            domains,
+            web_client,
+            &not_found_title,
+            external_urls,
+        )
+        .await;
     }
 }
 
-async fn is_404(web_client: &mut Client, not_found_title: &String) -> Result<bool, WebScrapingError> {
+async fn is_404(
+    web_client: &mut Client,
+    not_found_title: &String,
+) -> Result<bool, WebScrapingError> {
     let locator = Locator::XPath("//title");
 
     let mut title = web_client.find(locator).await?; //Element
 
     let title_text = title.html(true).await?;
 
-    if title_text.to_lowercase().contains(&not_found_title.to_lowercase()) {
+    if title_text
+        .to_lowercase()
+        .contains(&not_found_title.to_lowercase())
+    {
         return Ok(true);
     } else {
         return Ok(false);
@@ -311,7 +354,7 @@ async fn get_href(mut element: Element) -> Result<Option<String>, WebScrapingErr
     Ok(element.attr("href").await?)
 }
 
-fn format_urls(mut domain: String, mut urls: Vec<String>) -> Vec<String> {
+fn format_urls(mut domain: String, mut urls: Vec<String>, current_url: &String) -> Vec<String> {
     let mut urls_iter = urls.iter_mut();
 
     // remove '/' from end of domain if needed:
@@ -332,23 +375,32 @@ fn format_urls(mut domain: String, mut urls: Vec<String>) -> Vec<String> {
             continue;
         }
 
+        if url.starts_with("?") {
+            (*url).insert_str(0, current_url);
+            continue;
+        }
+
+        if url.len() == 0 {
+            (*url).insert_str(0, current_url);
+            continue;
+        }
+
         if !domain.starts_with("http") {
             //Adds https && http if not included
             let https = String::from("https://");
             let http = String::from("http://");
             if !url.starts_with(&(https.clone() + &domain)) && !url.starts_with(&(http + &domain)) {
-                if !url.starts_with("/") && !url.starts_with("?") && !url.starts_with("#") && url.len() > 0 {
+                if !url.starts_with("/") {
                     (*url).insert(0, '/');
                 };
                 (*url).insert_str(0, &(https + &domain));
             }
         } else {
             if !url.starts_with(&domain) {
-                if !url.starts_with("/") && !url.starts_with("?") && !url.starts_with("#") && url.len() > 0 {
+                if !url.starts_with("/") {
                     (*url).insert(0, '/');
                 };
-                
-                //add domain to url
+
                 (*url).insert_str(0, &domain);
             }
         }
@@ -366,7 +418,7 @@ fn add_to_list(
 ) -> Result<Vec<String>, WebScrapingError> {
     let (mut internal_urls, external_urls) = filter_domains(urls, domain_list);
 
-    internal_urls = format_urls(current_domain, internal_urls);
+    internal_urls = format_urls(current_domain, internal_urls, &host);
 
     let mut internal_url_iter = internal_urls.iter();
 
@@ -387,13 +439,16 @@ fn add_to_list(
         println!("Warning: Problem Indexing External Urls");
     }
 
-    
     Ok(internal_urls)
 }
 
-fn index_external_urls(external_urls: Vec<String>, external_url_index: &mut HashMap<String, Url>, current_url: String) -> Result<(), WebScrapingError> {
+fn index_external_urls(
+    external_urls: Vec<String>,
+    external_url_index: &mut HashMap<String, Url>,
+    current_url: String,
+) -> Result<(), WebScrapingError> {
     let mut urls_iter = external_urls.iter();
-    
+
     while let Some(url_string) = urls_iter.next() {
         if !external_url_index.contains_key(&url_string.to_string()) {
             let url_object = Url::new(url_string.to_string(), None, current_url.clone());
@@ -410,7 +465,8 @@ fn index_external_urls(external_urls: Vec<String>, external_url_index: &mut Hash
 }
 
 /// Checks urls to make sure they are in the trusted domains
-fn filter_domains(urls: Vec<String>, domain_list: Vec<String>) -> (Vec<String>, Vec<String>) { //internal urls, external urls// 
+fn filter_domains(urls: Vec<String>, domain_list: Vec<String>) -> (Vec<String>, Vec<String>) {
+    //internal urls, external urls//
     let mut url_iter = urls.iter();
     let mut external_urls: Vec<String> = Vec::new();
     let mut internal_urls: Vec<String> = Vec::new();
@@ -431,7 +487,7 @@ fn is_internal(url: String, domains: &Vec<String>) -> bool {
     let mut is_internal = false;
 
     if !url.starts_with("http") {
-        return true
+        return true;
     }
 
     for domain in domain_iter {
@@ -453,7 +509,7 @@ fn is_internal(url: String, domains: &Vec<String>) -> bool {
         } else if url.starts_with(&(http + domain)) {
             is_internal = true;
             break;
-        } 
+        }
         // else if url.starts_with("/") || url.starts_with("?") {
         //     is_internal = true;
         //     break;
@@ -469,22 +525,23 @@ async fn find_all_urls_from_webpage(
     domain_list: Vec<String>,
     url_index: &mut HashMap<String, Url>,
     external_urls: &mut HashMap<String, Url>,
-    not_found_title: &String
+    not_found_title: &String,
 ) -> Result<Vec<String>, WebScrapingError> {
     if let Err(_) = web_client.goto(url_to_visit).await {
-        if let Some(url) = url_index.get_mut(url_to_visit){
+        if let Some(url) = url_index.get_mut(url_to_visit) {
             url.set_response_code_(500);
         } else {
             panic!("Could not set 500 code on url will result in infinite loop!");
         }
 
-        return Err(WebScrapingError::ResponseCode500)
-
+        return Err(WebScrapingError::ResponseCode500);
     }
 
     //set response code on url object:
     if let Some(url_object) = url_index.get_mut(url_to_visit) {
-        (*url_object).set_response_code(web_client, not_found_title).await?;
+        (*url_object)
+            .set_response_code(web_client, not_found_title)
+            .await?;
     } else {
         panic!("Could not find Url Key");
     }
@@ -542,11 +599,12 @@ mod tests {
         ];
 
         let domain = "https://lulzbot.com".to_string();
+        let current_url = "https://lulzbot.com/learn".to_string();
 
         assert_eq!(
-            format_urls(domain, urls),
+            format_urls(domain, urls, &current_url),
             vec![
-                "https://lulzbot.com".to_string(),
+                "https://lulzbot.com/learn".to_string(),
                 "https://lulzbot.com/about-me".to_string(),
                 "https://lulzbot.com/support?search=3d+printers".to_string(),
                 "https://lulzbot.com/3d-printers/".to_string()
@@ -564,9 +622,10 @@ mod tests {
         ];
 
         let domain = "lulzbot.com".to_string();
+        let current_url = "https://lulzbot.com".to_string();
 
         assert_eq!(
-            format_urls(domain, urls),
+            format_urls(domain, urls, &current_url),
             vec![
                 "https://lulzbot.com".to_string(),
                 "https://lulzbot.com/about-me".to_string(),
@@ -583,16 +642,17 @@ mod tests {
             "about-me".to_string(),
             "?search=3d+printers".to_string(),
             "https://learn.lulzbot.com/support/cura".to_string(),
-            ];
-            
+        ];
+
         let domain = "lulzbot.com/".to_string();
-        
+        let current_url = "https://lulzbot.com/learn".to_string();
+
         assert_eq!(
-            format_urls(domain, urls),
+            format_urls(domain, urls, &current_url),
             vec![
-                "https://lulzbot.com".to_string(),
+                "https://lulzbot.com/learn".to_string(),
                 "https://lulzbot.com/about-me".to_string(),
-                "https://lulzbot.com?search=3d+printers".to_string(),
+                "https://lulzbot.com/learn?search=3d+printers".to_string(),
                 "https://learn.lulzbot.com/support/cura".to_string(),
             ]
         );
@@ -613,21 +673,19 @@ mod tests {
             "https://shop.lulzbot.com/3d-printers/".to_string(),
             " http://learn.lulzbot.com/learn/".to_string(),
             "/learn/here".to_string(),
-            ];
-            
-            assert_eq!(
-                filter_domains(urls, domains),
-                (
-                    vec![
-                        "https://lulzbot.com/3d-printers/".to_string(),
-                        "https://shop.lulzbot.com/3d-printers/".to_string(),
-                        " http://learn.lulzbot.com/learn/".to_string(),
-                        "/learn/here".to_string(),
-                        ],
-                    vec![
-                    "https://makerbot.com/3d-printers/".to_string(),
-                    ]
-                )
+        ];
+
+        assert_eq!(
+            filter_domains(urls, domains),
+            (
+                vec![
+                    "https://lulzbot.com/3d-printers/".to_string(),
+                    "https://shop.lulzbot.com/3d-printers/".to_string(),
+                    " http://learn.lulzbot.com/learn/".to_string(),
+                    "/learn/here".to_string(),
+                ],
+                vec!["https://makerbot.com/3d-printers/".to_string(),]
+            )
         );
     }
 
@@ -646,19 +704,18 @@ mod tests {
             "https://shop.lulzbot.com/3d-printers/".to_string(),
             "http://learn.lulzbot.com/learn/".to_string(),
             "?topic=Problem+Solving".to_string(),
-            ];
-            
-            assert_eq!(
-                filter_domains(urls, domains),
-                ( vec![
+        ];
+
+        assert_eq!(
+            filter_domains(urls, domains),
+            (
+                vec![
                     "https://lulzbot.com/3d-printers/".to_string(),
                     "https://shop.lulzbot.com/3d-printers/".to_string(),
                     "http://learn.lulzbot.com/learn/".to_string(),
                     "?topic=Problem+Solving".to_string(),
-                    ], 
-                    vec![
-                        "https://makerbot.com/3d-printers/".to_string(),
-            ]
+                ],
+                vec!["https://makerbot.com/3d-printers/".to_string(),]
             )
         );
     }
@@ -679,27 +736,28 @@ mod tests {
             "http://learn.lulzbot.com/learn/".to_string(),
             "http://forum.lulzbot.com/learn/".to_string(),
             "/learn/here".to_string(),
-            ];
-            
-            assert_eq!(
-                filter_domains(urls, domains),
-                (vec![
+        ];
+
+        assert_eq!(
+            filter_domains(urls, domains),
+            (
+                vec![
                     "https://lulzbot.com/3d-printers/".to_string(),
                     "https://shop.lulzbot.com/3d-printers/".to_string(),
                     "http://learn.lulzbot.com/learn/".to_string(),
                     "/learn/here".to_string(),
-                    ],
-                    vec![
-                        "https://makerbot.com/3d-printers/".to_string(),
-                        "http://forum.lulzbot.com/learn/".to_string(),
-                    ]
-        )
+                ],
+                vec![
+                    "https://makerbot.com/3d-printers/".to_string(),
+                    "http://forum.lulzbot.com/learn/".to_string(),
+                ]
+            )
         );
     }
 
     #[test]
     fn is_internal_test() {
-        // fn is_internal(url: String, domains: &Vec<String>) -> bool 
+        // fn is_internal(url: String, domains: &Vec<String>) -> bool
         let domains = vec!["example.com".to_string(), "www.example.com".to_string()];
 
         assert!(is_internal("https://example.com/abs".to_string(), &domains));

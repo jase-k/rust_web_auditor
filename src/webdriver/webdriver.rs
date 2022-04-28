@@ -25,8 +25,7 @@ impl DriverHandle {
                             .spawn()
                             .expect("command failed to start"),
                     }
-                },
-                //TODO: add more compatible Drivers
+                } //TODO: add more compatible Drivers
             }
         } else if cfg!(target_os = "linux") {
             println!("Running configuration for linux");
@@ -37,8 +36,7 @@ impl DriverHandle {
                             .spawn()
                             .expect("command failed to start"),
                     }
-                },
-                //Add more compatible Drivers later
+                } //Add more compatible Drivers later
             }
         } else {
             panic!("Didn't recognize os system!");
